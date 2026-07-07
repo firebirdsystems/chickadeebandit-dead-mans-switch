@@ -40,6 +40,7 @@
   "inactivity_alerts": {
     "table": "switches",
     "member_column": "member_id",
+    "id_column": "id",
     "active_column": "active",
     "interval_hours_column": "interval_hours",
     "last_checkin_column": "last_checkin_at",

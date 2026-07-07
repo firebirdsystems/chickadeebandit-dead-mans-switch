@@ -51,6 +51,9 @@
     .status-text .headline { font-weight: 600; }
     .status-text .detail { font-size: 0.85rem; color: var(--hub-text-muted, #6b7280); margin-top: 2px; }
 
+    .switch-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .switch-head .title { font-weight: 700; font-size: 1.02rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     button {
       font: inherit;
       border: none;
@@ -66,7 +69,7 @@
     .btn-danger { background: transparent; color: #b91c1c; border: 1px solid #fecaca; }
 
     label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 6px; }
-    select, textarea {
+    input[type="text"], input[type="number"], textarea {
       font: inherit;
       width: 100%;
       border: 1px solid var(--hub-border, #d1d5db);
@@ -75,15 +78,20 @@
       background: var(--hub-surface, #fff);
       color: inherit;
     }
-    textarea { min-height: 90px; resize: vertical; }
+    .weeks-field { display: flex; align-items: center; gap: 8px; }
+    .weeks-field input { width: 90px; }
+    .weeks-field .suffix { color: var(--hub-text-muted, #6b7280); font-size: 0.9rem; }
+    textarea { min-height: 80px; resize: vertical; }
     .hint { font-size: 0.8rem; color: var(--hub-text-muted, #6b7280); margin-top: 4px; }
 
     .recipient { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.95rem; }
     .recipient input { width: 16px; height: 16px; }
 
     .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+    .actions .spacer { flex: 1; }
     .error { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; }
     .muted { color: var(--hub-text-muted, #6b7280); }
+    .empty { text-align: center; color: var(--hub-text-muted, #6b7280); padding: 8px 0 4px; }
   </style>
 </head>
 <body>
@@ -94,50 +102,72 @@
 
   <div class="wrap">
     <div id="buy-banner" class="banner buy" hidden></div>
-    <div id="warn-banner" class="banner warn" hidden></div>
 
     <div class="card">
       <div class="status-row">
-        <div id="status-dot" class="status-dot disarmed"></div>
+        <div id="overall-dot" class="status-dot disarmed"></div>
         <div class="status-text">
-          <div id="status-headline" class="headline">Loading…</div>
-          <div id="status-detail" class="detail"></div>
+          <div id="overall-headline" class="headline">Loading…</div>
+          <div id="overall-detail" class="detail"></div>
         </div>
         <button id="checkin-btn" class="btn-checkin" hidden>Check in now</button>
       </div>
+      <p class="hint">One check-in resets the clock on all of your switches at once.</p>
     </div>
 
-    <div class="card">
-      <strong>Switch settings</strong>
+    <div id="switches"></div>
 
-      <label for="interval">Check-in interval</label>
-      <select id="interval"></select>
-      <p class="hint">If you don't check in within this window, the alert goes out.</p>
-
-      <label for="message">Message to include in the alert</label>
-      <textarea id="message" maxlength="2000" placeholder="What should they know or do if you go quiet? (optional)"></textarea>
-
-      <label>Who gets alerted</label>
-      <div id="recipients"></div>
-      <p class="hint">Leave everyone unchecked to alert all adults in the household.</p>
-
-      <div class="actions">
-        <button id="save-btn" class="btn-primary">Save settings</button>
-        <button id="arm-btn" class="btn-primary" hidden>Arm switch</button>
-        <button id="disarm-btn" class="btn-danger" hidden>Disarm</button>
-      </div>
-      <div id="form-error" class="error" hidden></div>
+    <div class="actions">
+      <button id="add-btn" class="btn-primary">+ Add a switch</button>
     </div>
 
-    <p class="hint">Alerts are sent by email to household members only. Monitoring runs on the hub's servers —
+    <p class="hint" style="margin-top:20px">Alerts are sent by email to household members only. Monitoring runs on the hub's servers —
       it works even when nobody has the app open.</p>
   </div>
 
+  <template id="switch-tpl">
+    <div class="card switch-card" data-id="">
+      <div class="switch-head">
+        <div class="status-dot disarmed" data-el="dot"></div>
+        <div class="title" data-el="title"></div>
+      </div>
+      <div class="status-text">
+        <div class="headline" data-el="headline"></div>
+        <div class="detail" data-el="detail"></div>
+      </div>
+
+      <label>Name this switch</label>
+      <input type="text" data-el="label" maxlength="60" placeholder="e.g. Close family" />
+
+      <label>Alert me if I go quiet for</label>
+      <div class="weeks-field">
+        <input type="number" data-el="weeks" min="1" max="104" step="1" />
+        <span class="suffix">week(s)</span>
+      </div>
+
+      <label>Message to include in the alert</label>
+      <textarea data-el="message" maxlength="2000" placeholder="What should they know or do if you go quiet? (optional)"></textarea>
+
+      <label>Who gets alerted</label>
+      <div data-el="recipients"></div>
+      <p class="hint">Leave everyone unchecked to alert all adults in the household.</p>
+
+      <div class="actions">
+        <button class="btn-primary" data-action="save">Save</button>
+        <button class="btn-primary" data-action="arm">Arm switch</button>
+        <button class="btn-danger" data-action="disarm" hidden>Disarm</button>
+        <span class="spacer"></span>
+        <button class="btn-ghost" data-action="delete">Delete</button>
+      </div>
+      <div class="error" data-el="error" hidden></div>
+    </div>
+  </template>
+
   <script type="module">
-    import { esc, hubAlert } from "/hub-sdk.js";
+    import { esc, hubAlert, hubConfirm } from "/hub-sdk.js";
     import {
-      INTERVAL_OPTIONS, intervalLabel, switchStatus, formatRemaining,
-      validateConfig, recipientsSummary,
+      hoursToWeeks, weeksToHours, intervalLabel, switchStatus, formatRemaining,
+      validateConfig, recipientsSummary, switchTitle, MAX_SWITCHES,
     } from "./logic.js";
 
     const DB = window.__DB_URL ?? "";
@@ -147,8 +177,8 @@
     const CHECK_IN = `/run/${APP_ID}/api/check-in`;
 
     let members = [];
-    let row = null;          // my switch row (or null)
-    let entitled = null;     // null until the status endpoint answers
+    let rows = [];          // my switch rows
+    let entitled = null;    // null until the status endpoint answers
 
     async function db(sql, params = []) {
       if (!DB) return { rows: [] };
@@ -167,10 +197,13 @@
       } catch { members = []; }
     }
 
-    async function loadRow() {
-      if (!ME) return;
-      const { rows } = await db("SELECT * FROM switches WHERE member_id = ?", [ME.id]);
-      row = rows?.[0] ?? null;
+    async function loadRows() {
+      if (!ME) { rows = []; return; }
+      const { rows: r } = await db(
+        "SELECT * FROM switches WHERE member_id = ? ORDER BY created_at",
+        [ME.id],
+      );
+      rows = r ?? [];
     }
 
     async function loadEntitlement() {
@@ -185,8 +218,9 @@
     // ── Rendering ─────────────────────────────────────────────────────────────
 
     const el = (id) => document.getElementById(id);
+    const adultRecipients = () => members.filter(m => m.role === "adult" && m.id !== ME?.id);
 
-    function renderBanners() {
+    function renderBanner() {
       const buy = el("buy-banner");
       if (entitled === false) {
         buy.innerHTML = "🔒 <strong>Monitoring is not active for your household yet.</strong> " +
@@ -199,44 +233,79 @@
       }
     }
 
-    function renderStatus() {
-      const status = switchStatus(row);
-      const dot = el("status-dot");
-      const headline = el("status-headline");
-      const detail = el("status-detail");
+    function renderOverall() {
+      const dot = el("overall-dot");
+      const headline = el("overall-headline");
+      const detail = el("overall-detail");
       const checkinBtn = el("checkin-btn");
-      dot.className = `status-dot ${status.state}`;
-      checkinBtn.hidden = !row || Number(row.active) !== 1;
 
-      if (!ME) { headline.textContent = "Sign in to set up your switch."; return; }
-      if (status.state === "disarmed") {
-        headline.textContent = "Your switch is disarmed";
-        detail.textContent = "Save your settings, then arm it to start the clock.";
-      } else if (status.state === "unstarted") {
+      if (!ME) {
+        dot.className = "status-dot disarmed";
+        headline.textContent = "Sign in to set up your switches.";
+        detail.textContent = "";
+        checkinBtn.hidden = true;
+        return;
+      }
+
+      const armed = rows.filter(r => Number(r.active) === 1);
+      checkinBtn.hidden = armed.length === 0;
+
+      if (rows.length === 0) {
+        dot.className = "status-dot disarmed";
+        headline.textContent = "No switches yet";
+        detail.textContent = "Add a switch to get started.";
+        return;
+      }
+      if (armed.length === 0) {
+        dot.className = "status-dot disarmed";
+        headline.textContent = "All switches disarmed";
+        detail.textContent = "Arm a switch below to start its clock.";
+        return;
+      }
+
+      // Surface the most urgent armed switch.
+      const ranked = armed
+        .map(r => ({ r, s: switchStatus(r) }))
+        .sort((a, b) => order(a.s) - order(b.s));
+      const top = ranked[0];
+      dot.className = `status-dot ${top.s.state}`;
+      if (top.s.state === "overdue") {
+        headline.textContent = "A switch is overdue — your contacts may have been alerted";
+        detail.textContent = `“${switchTitle(top.r, members, ME.id)}” passed its deadline ${formatRemaining(top.s.overdueMs)} ago. Check in to reset.`;
+      } else if (top.s.state === "unstarted") {
         headline.textContent = "Armed — waiting for your first check-in";
         detail.textContent = "Check in now to start the clock.";
-      } else if (status.state === "overdue") {
-        headline.textContent = "Overdue — your contacts may have been alerted";
-        detail.textContent = `Deadline passed ${formatRemaining(status.overdueMs)} ago. Check in to reset.`;
       } else {
-        headline.textContent = status.state === "due_soon" ? "Check in soon" : "All good";
-        detail.textContent =
-          `Next check-in due in ${formatRemaining(status.remainingMs)} (${intervalLabel(row.interval_hours)} interval). ` +
-          `Alerts go to: ${recipientsSummary(JSON.parse(row.recipient_member_ids || "[]"), members, ME.id)}.`;
+        headline.textContent = armed.length === 1 ? "Your switch is armed" : `${armed.length} switches armed`;
+        detail.textContent = `Soonest check-in due in ${formatRemaining(top.s.remainingMs)} (“${switchTitle(top.r, members, ME.id)}”).`;
       }
     }
 
-    function renderForm() {
-      const interval = el("interval");
-      interval.innerHTML = INTERVAL_OPTIONS
-        .map(o => `<option value="${o.hours}">${esc(o.label)}</option>`)
-        .join("");
-      interval.value = String(row?.interval_hours ?? 72);
-      el("message").value = row?.message ?? "";
+    // Urgency ordering for the overall summary: overdue first, then due soon…
+    function order(s) {
+      return { overdue: 0, due_soon: 1, unstarted: 2, ok: 3, disarmed: 4 }[s.state] ?? 5;
+    }
 
-      const chosen = new Set(JSON.parse(row?.recipient_member_ids || "[]"));
-      const adults = members.filter(m => m.role === "adult" && m.id !== ME?.id);
-      el("recipients").innerHTML = adults.length
+    function renderSwitchCard(row) {
+      const node = el("switch-tpl").content.firstElementChild.cloneNode(true);
+      node.dataset.id = row.id;
+      const q = (name) => node.querySelector(`[data-el="${name}"]`);
+
+      q("title").textContent = switchTitle(row, members, ME?.id);
+
+      const status = switchStatus(row);
+      q("dot").className = `status-dot ${status.state}`;
+      const { headline, detail } = statusText(row, status);
+      q("headline").textContent = headline;
+      q("detail").textContent = detail;
+
+      q("label").value = row.label ?? "";
+      q("weeks").value = String(hoursToWeeks(row.interval_hours));
+      q("message").value = row.message ?? "";
+
+      const chosen = new Set(JSON.parse(row.recipient_member_ids || "[]"));
+      const adults = adultRecipients();
+      q("recipients").innerHTML = adults.length
         ? adults.map(m => `
             <label class="recipient">
               <input type="checkbox" value="${esc(m.id)}" ${chosen.has(m.id) ? "checked" : ""} />
@@ -244,50 +313,141 @@
             </label>`).join("")
         : '<p class="hint">No other adults in the household yet — invite someone first.</p>';
 
-      const armed = row && Number(row.active) === 1;
-      el("arm-btn").hidden = !row || armed;
-      el("disarm-btn").hidden = !armed;
+      const armed = Number(row.active) === 1;
+      node.querySelector('[data-action="arm"]').hidden = armed;
+      node.querySelector('[data-action="disarm"]').hidden = !armed;
+      return node;
     }
 
-    function renderAll() { renderBanners(); renderStatus(); renderForm(); }
-
-    // ── Actions ───────────────────────────────────────────────────────────────
-
-    function readForm() {
+    function statusText(row, status) {
+      if (status.state === "disarmed") {
+        return { headline: "Disarmed", detail: "Save your settings, then arm it to start the clock." };
+      }
+      if (status.state === "unstarted") {
+        return { headline: "Armed — waiting for your first check-in", detail: "Check in above to start the clock." };
+      }
+      if (status.state === "overdue") {
+        return {
+          headline: "Overdue — your contacts may have been alerted",
+          detail: `Deadline passed ${formatRemaining(status.overdueMs)} ago. Check in to reset.`,
+        };
+      }
+      const who = recipientsSummary(JSON.parse(row.recipient_member_ids || "[]"), members, ME?.id);
       return {
-        intervalHours: Number(el("interval").value),
-        message: el("message").value.trim(),
-        recipientIds: [...el("recipients").querySelectorAll("input:checked")].map(i => i.value),
+        headline: status.state === "due_soon" ? "Check in soon" : "All good",
+        detail: `Next check-in due in ${formatRemaining(status.remainingMs)} (${intervalLabel(row.interval_hours)} interval). Alerts go to: ${who}.`,
       };
     }
 
-    async function save({ silent = false } = {}) {
-      if (!ME) return false;
-      const cfg = readForm();
-      const adults = members.filter(m => m.role === "adult");
-      const error = validateConfig(cfg, adults);
-      const errEl = el("form-error");
-      if (error) { errEl.textContent = error; errEl.hidden = false; return false; }
-      errEl.hidden = true;
-
-      const now = new Date().toISOString();
-      if (row) {
-        await db(
-          "UPDATE switches SET interval_hours = ?, message = ?, recipient_member_ids = ?, updated_at = ? WHERE member_id = ?",
-          [cfg.intervalHours, cfg.message, JSON.stringify(cfg.recipientIds), now, ME.id],
-        );
+    function renderSwitches() {
+      const list = el("switches");
+      list.innerHTML = "";
+      if (ME && rows.length === 0) {
+        list.innerHTML = '<div class="card empty">You don\'t have any switches yet. Add one below.</div>';
       } else {
-        await db(
-          "INSERT INTO switches (id, member_id, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?, ?, ?)",
-          [crypto.randomUUID(), ME.id, cfg.intervalHours, cfg.message, JSON.stringify(cfg.recipientIds), now, now],
-        );
+        for (const row of rows) list.appendChild(renderSwitchCard(row));
       }
-      await loadRow();
-      if (!silent) renderAll();
+      updateAddBtn();
+    }
+
+    const cardNode = (id) => [...el("switches").querySelectorAll(".switch-card")].find(n => n.dataset.id === id) ?? null;
+    function updateAddBtn() { el("add-btn").disabled = !ME || rows.length >= MAX_SWITCHES; }
+
+    // Replace / insert / remove a single card from the current rows, leaving
+    // every other card's DOM (and any unsaved edits in it) untouched.
+    function syncCard(id) {
+      const existing = cardNode(id);
+      const row = rows.find(r => r.id === id);
+      if (!row) { if (existing) existing.remove(); return; }
+      const fresh = renderSwitchCard(row);
+      if (existing) existing.replaceWith(fresh);
+      else el("switches").appendChild(fresh);
+    }
+
+    function renderAll() { renderBanner(); renderOverall(); renderSwitches(); }
+
+    // Re-render only the live status text without rebuilding forms (preserves edits).
+    function refreshStatuses() {
+      renderOverall();
+      for (const node of el("switches").querySelectorAll(".switch-card")) {
+        const row = rows.find(r => r.id === node.dataset.id);
+        if (!row) continue;
+        const status = switchStatus(row);
+        node.querySelector('[data-el="dot"]').className = `status-dot ${status.state}`;
+        const { headline, detail } = statusText(row, status);
+        node.querySelector('[data-el="headline"]').textContent = headline;
+        node.querySelector('[data-el="detail"]').textContent = detail;
+      }
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+
+    function readCardForm(node) {
+      const q = (name) => node.querySelector(`[data-el="${name}"]`);
+      return {
+        label: q("label").value.trim(),
+        intervalWeeks: Number(q("weeks").value),
+        message: q("message").value.trim(),
+        recipientIds: [...q("recipients").querySelectorAll("input:checked")].map(i => i.value),
+      };
+    }
+
+    function showCardError(node, msg) {
+      const errEl = node.querySelector('[data-el="error"]');
+      if (msg) { errEl.textContent = msg; errEl.hidden = false; }
+      else errEl.hidden = true;
+    }
+
+    async function saveCard(node, { silent = false } = {}) {
+      const id = node.dataset.id;
+      const cfg = readCardForm(node);
+      const error = validateConfig(cfg, members.filter(m => m.role === "adult"));
+      if (error) { showCardError(node, error); return false; }
+      showCardError(node, null);
+
+      await db(
+        "UPDATE switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+        [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), new Date().toISOString(), id, ME.id],
+      );
+      await loadRows();
+      // Re-render only this card (reflects the saved label/status); other cards
+      // keep their DOM so any unsaved edits in them survive.
+      if (!silent) { syncCard(id); renderOverall(); }
       return true;
     }
 
-    async function checkIn() {
+    async function addSwitch() {
+      if (!ME || rows.length >= MAX_SWITCHES) return;
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const hadCards = !!el("switches").querySelector(".switch-card");
+      await db(
+        "INSERT INTO switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
+        [id, ME.id, now, now],
+      );
+      await loadRows();
+      // Append the new card without rebuilding existing ones (preserves their
+      // unsaved edits); only rebuild when leaving the empty state.
+      if (hadCards) syncCard(id); else renderSwitches();
+      renderOverall();
+      updateAddBtn();
+    }
+
+    async function deleteSwitch(node) {
+      const id = node.dataset.id;
+      const row = rows.find(r => r.id === id);
+      const name = switchTitle(row, members, ME?.id);
+      if (!(await hubConfirm(`Delete the switch “${name}”? This can't be undone.`))) return;
+      await db("DELETE FROM switches WHERE id = ? AND member_id = ?", [id, ME.id]);
+      await loadRows();
+      // Drop just this card; rebuild only to show the empty state once none remain.
+      if (rows.length === 0) renderSwitches(); else node.remove();
+      renderOverall();
+      updateAddBtn();
+    }
+
+    // Global check-in: the hub stamps last_checkin on every switch we own.
+    async function checkIn({ render = true } = {}) {
       const res = await fetch(CHECK_IN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -295,7 +455,7 @@
       });
       if (res.status === 402) {
         entitled = false;
-        renderBanners();
+        renderBanner();
         return false;
       }
       if (!res.ok) {
@@ -304,44 +464,59 @@
         return false;
       }
       entitled = true;
-      await loadRow();
-      renderAll();
+      renderBanner();
+      await loadRows();
+      // A check-in resets last_checkin on every switch — refresh live statuses
+      // only, never the form fields, so an in-progress edit survives it.
+      if (render) refreshStatuses();
       return true;
     }
 
-    async function arm() {
-      if (!(await save({ silent: true }))) return;
-      await db("UPDATE switches SET active = 1, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
-      await loadRow();
-      // First check-in starts the server-side clock; a 402 here means the
+    async function armCard(node) {
+      const id = node.dataset.id;
+      if (!(await saveCard(node, { silent: true }))) return;
+      await db("UPDATE switches SET active = 1, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+      await loadRows();
+      // The first check-in starts the server-side clock; a 402 here means the
       // household lacks the Premium capabilities — disarm again so nobody
       // believes an unmonitored switch is protecting them.
-      if (!(await checkIn())) {
-        await db("UPDATE switches SET active = 0, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
-        await loadRow();
+      if (!(await checkIn({ render: false }))) {
+        await db("UPDATE switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+        await loadRows();
       }
-      renderAll();
+      // Rebuild just this card (its buttons + fields now reflect the armed,
+      // saved state); refresh the other cards' live status only.
+      syncCard(id);
+      refreshStatuses();
     }
 
-    async function disarm() {
-      await db("UPDATE switches SET active = 0, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
-      await loadRow();
-      renderAll();
+    async function disarmCard(node) {
+      const id = node.dataset.id;
+      await db("UPDATE switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+      await loadRows();
+      syncCard(id);
+      refreshStatuses();
     }
 
-    el("save-btn").addEventListener("click", () => save());
-    el("arm-btn").addEventListener("click", arm);
-    el("disarm-btn").addEventListener("click", disarm);
+    el("switches").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const node = btn.closest(".switch-card");
+      if (!node) return;
+      const action = btn.dataset.action;
+      if (action === "save") saveCard(node);
+      else if (action === "arm") armCard(node);
+      else if (action === "disarm") disarmCard(node);
+      else if (action === "delete") deleteSwitch(node);
+    });
+
+    el("add-btn").addEventListener("click", addSwitch);
     el("checkin-btn").addEventListener("click", checkIn);
 
     (async function init() {
-      await Promise.all([loadMembers(), loadRow(), loadEntitlement()]);
-      if (!row && ME) {
-        // Materialize the row on first visit so arm/check-in have a target.
-        await save({ silent: true });
-      }
+      await Promise.all([loadMembers(), loadRows(), loadEntitlement()]);
       renderAll();
-      setInterval(renderStatus, 60_000); // keep the countdown fresh
+      setInterval(refreshStatuses, 60_000); // keep the countdowns fresh
     })();
   </script>
 </body>

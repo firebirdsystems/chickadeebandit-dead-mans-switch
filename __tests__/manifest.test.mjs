@@ -34,23 +34,33 @@ describe("inactivity_alerts protocol config", () => {
   it("is declared with all required columns", () => {
     expect(cfg).toBeTruthy();
     for (const field of [
-      "table", "member_column", "active_column", "interval_hours_column",
+      "table", "member_column", "id_column", "active_column", "interval_hours_column",
       "last_checkin_column", "last_alerted_column", "message_column", "recipients_column",
     ]) {
       expect(cfg[field], `missing ${field}`).toBeTruthy();
     }
   });
 
+  it("declares an id_column so the cron stamps each switch independently", () => {
+    // Members can own several switches; per-switch stamping keeps their other
+    // switches due after one fires. Without id_column the cron stamps by member.
+    expect(cfg.id_column).toBe("id");
+  });
+
   it("every configured column exists in the migration", () => {
     const prefixed = `app_dead_mans_switch__${cfg.table}`;
     expect(migration).toContain(prefixed);
     const columns = [
-      cfg.member_column, cfg.active_column, cfg.interval_hours_column,
+      cfg.id_column, cfg.member_column, cfg.active_column, cfg.interval_hours_column,
       cfg.last_checkin_column, cfg.last_alerted_column, cfg.message_column, cfg.recipients_column,
     ];
     for (const col of columns) {
       expect(migration, `migration missing column ${col}`).toMatch(new RegExp(`^\\s+${col}\\s`, "m"));
     }
+  });
+
+  it("no longer forces one switch per member (unique index removed)", () => {
+    expect(migration).not.toMatch(/UNIQUE INDEX/i);
   });
 
   it("the switch table is owner_only so members only see their own switch", () => {
