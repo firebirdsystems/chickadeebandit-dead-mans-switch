@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base href="/run/dead-mans-switch/" />
+  <title>Check-In Switch</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--hub-font, system-ui, sans-serif);
+      font-size: var(--hub-font-size, 15px);
+      background: var(--hub-bg, #f9fafb);
+      color: var(--hub-text, #111827);
+      min-height: 100vh;
+    }
+
+    .app-header { padding: 16px 20px 0; }
+    .app-header h1 { font-size: 1.25rem; font-weight: 700; }
+    .app-header .subtitle { font-size: 0.85rem; color: var(--hub-text-muted, #6b7280); margin-top: 2px; }
+
+    .wrap { padding: 16px 20px 40px; max-width: 640px; }
+
+    .card {
+      background: var(--hub-surface, #fff);
+      border: 1px solid var(--hub-border, #e5e7eb);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+
+    .banner {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .banner.buy { background: #eef2ff; border: 1px solid #c7d2fe; color: #3730a3; }
+    .banner.warn { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; }
+
+    .status-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .status-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.disarmed { background: #9ca3af; }
+    .status-dot.ok { background: #10b981; }
+    .status-dot.due_soon { background: #f59e0b; }
+    .status-dot.overdue { background: #ef4444; }
+    .status-dot.unstarted { background: #6366f1; }
+    .status-text { flex: 1; min-width: 200px; }
+    .status-text .headline { font-weight: 600; }
+    .status-text .detail { font-size: 0.85rem; color: var(--hub-text-muted, #6b7280); margin-top: 2px; }
+
+    button {
+      font: inherit;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .btn-primary { background: var(--hub-accent, #111827); color: #fff; }
+    .btn-checkin { background: #10b981; color: #fff; font-size: 1rem; padding: 12px 22px; }
+    .btn-ghost { background: transparent; color: var(--hub-text-muted, #6b7280); border: 1px solid var(--hub-border, #e5e7eb); }
+    .btn-danger { background: transparent; color: #b91c1c; border: 1px solid #fecaca; }
+
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin: 14px 0 6px; }
+    select, textarea {
+      font: inherit;
+      width: 100%;
+      border: 1px solid var(--hub-border, #d1d5db);
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: var(--hub-surface, #fff);
+      color: inherit;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .hint { font-size: 0.8rem; color: var(--hub-text-muted, #6b7280); margin-top: 4px; }
+
+    .recipient { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.95rem; }
+    .recipient input { width: 16px; height: 16px; }
+
+    .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+    .error { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; }
+    .muted { color: var(--hub-text-muted, #6b7280); }
+  </style>
+</head>
+<body>
+  <div class="app-header">
+    <h1>🛟 Check-In Switch</h1>
+    <p class="subtitle">If you go quiet past your chosen interval, the people you pick get your message.</p>
+  </div>
+
+  <div class="wrap">
+    <div id="buy-banner" class="banner buy" hidden></div>
+    <div id="warn-banner" class="banner warn" hidden></div>
+
+    <div class="card">
+      <div class="status-row">
+        <div id="status-dot" class="status-dot disarmed"></div>
+        <div class="status-text">
+          <div id="status-headline" class="headline">Loading…</div>
+          <div id="status-detail" class="detail"></div>
+        </div>
+        <button id="checkin-btn" class="btn-checkin" hidden>Check in now</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Switch settings</strong>
+
+      <label for="interval">Check-in interval</label>
+      <select id="interval"></select>
+      <p class="hint">If you don't check in within this window, the alert goes out.</p>
+
+      <label for="message">Message to include in the alert</label>
+      <textarea id="message" maxlength="2000" placeholder="What should they know or do if you go quiet? (optional)"></textarea>
+
+      <label>Who gets alerted</label>
+      <div id="recipients"></div>
+      <p class="hint">Leave everyone unchecked to alert all adults in the household.</p>
+
+      <div class="actions">
+        <button id="save-btn" class="btn-primary">Save settings</button>
+        <button id="arm-btn" class="btn-primary" hidden>Arm switch</button>
+        <button id="disarm-btn" class="btn-danger" hidden>Disarm</button>
+      </div>
+      <div id="form-error" class="error" hidden></div>
+    </div>
+
+    <p class="hint">Alerts are sent by email to household members only. Monitoring runs on the hub's servers —
+      it works even when nobody has the app open.</p>
+  </div>
+
+  <script type="module">
+    import { esc, hubAlert } from "/hub-sdk.js";
+    import {
+      INTERVAL_OPTIONS, intervalLabel, switchStatus, formatRemaining,
+      validateConfig, recipientsSummary,
+    } from "./logic.js";
+
+    const DB = window.__DB_URL ?? "";
+    const CONTEXT = window.__CONTEXT_URL ?? "";
+    const APP_ID = window.__APP_ID ?? "dead-mans-switch";
+    const ME = window.__CURRENT_MEMBER ?? null;
+    const CHECK_IN = `/run/${APP_ID}/api/check-in`;
+
+    let members = [];
+    let row = null;          // my switch row (or null)
+    let entitled = null;     // null until the status endpoint answers
+
+    async function db(sql, params = []) {
+      if (!DB) return { rows: [] };
+      const res = await fetch(DB, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql, params }),
+      });
+      return res.json();
+    }
+
+    async function loadMembers() {
+      try {
+        const res = await fetch(`${CONTEXT}?keys=family.members`);
+        members = ((await res.json())["family.members"]) ?? [];
+      } catch { members = []; }
+    }
+
+    async function loadRow() {
+      if (!ME) return;
+      const { rows } = await db("SELECT * FROM switches WHERE member_id = ?", [ME.id]);
+      row = rows?.[0] ?? null;
+    }
+
+    async function loadEntitlement() {
+      try {
+        const res = await fetch(CHECK_IN);
+        if (!res.ok) { entitled = null; return; }
+        const data = await res.json();
+        entitled = !!data.entitled;
+      } catch { entitled = null; }
+    }
+
+    // ── Rendering ─────────────────────────────────────────────────────────────
+
+    const el = (id) => document.getElementById(id);
+
+    function renderBanners() {
+      const buy = el("buy-banner");
+      if (entitled === false) {
+        buy.innerHTML = "🔒 <strong>Monitoring is not active for your household yet.</strong> " +
+          "The app is free to set up, but the hub-side monitoring and alert emails are part of the " +
+          "<strong>Premium</strong> capability bundle. A household admin can upgrade from " +
+          "<strong>Apps → Marketplace</strong> (look for the Premium prompt on this app).";
+        buy.hidden = false;
+      } else {
+        buy.hidden = true;
+      }
+    }
+
+    function renderStatus() {
+      const status = switchStatus(row);
+      const dot = el("status-dot");
+      const headline = el("status-headline");
+      const detail = el("status-detail");
+      const checkinBtn = el("checkin-btn");
+      dot.className = `status-dot ${status.state}`;
+      checkinBtn.hidden = !row || Number(row.active) !== 1;
+
+      if (!ME) { headline.textContent = "Sign in to set up your switch."; return; }
+      if (status.state === "disarmed") {
+        headline.textContent = "Your switch is disarmed";
+        detail.textContent = "Save your settings, then arm it to start the clock.";
+      } else if (status.state === "unstarted") {
+        headline.textContent = "Armed — waiting for your first check-in";
+        detail.textContent = "Check in now to start the clock.";
+      } else if (status.state === "overdue") {
+        headline.textContent = "Overdue — your contacts may have been alerted";
+        detail.textContent = `Deadline passed ${formatRemaining(status.overdueMs)} ago. Check in to reset.`;
+      } else {
+        headline.textContent = status.state === "due_soon" ? "Check in soon" : "All good";
+        detail.textContent =
+          `Next check-in due in ${formatRemaining(status.remainingMs)} (${intervalLabel(row.interval_hours)} interval). ` +
+          `Alerts go to: ${recipientsSummary(JSON.parse(row.recipient_member_ids || "[]"), members, ME.id)}.`;
+      }
+    }
+
+    function renderForm() {
+      const interval = el("interval");
+      interval.innerHTML = INTERVAL_OPTIONS
+        .map(o => `<option value="${o.hours}">${esc(o.label)}</option>`)
+        .join("");
+      interval.value = String(row?.interval_hours ?? 72);
+      el("message").value = row?.message ?? "";
+
+      const chosen = new Set(JSON.parse(row?.recipient_member_ids || "[]"));
+      const adults = members.filter(m => m.role === "adult" && m.id !== ME?.id);
+      el("recipients").innerHTML = adults.length
+        ? adults.map(m => `
+            <label class="recipient">
+              <input type="checkbox" value="${esc(m.id)}" ${chosen.has(m.id) ? "checked" : ""} />
+              ${esc(m.name)}
+            </label>`).join("")
+        : '<p class="hint">No other adults in the household yet — invite someone first.</p>';
+
+      const armed = row && Number(row.active) === 1;
+      el("arm-btn").hidden = !row || armed;
+      el("disarm-btn").hidden = !armed;
+    }
+
+    function renderAll() { renderBanners(); renderStatus(); renderForm(); }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+
+    function readForm() {
+      return {
+        intervalHours: Number(el("interval").value),
+        message: el("message").value.trim(),
+        recipientIds: [...el("recipients").querySelectorAll("input:checked")].map(i => i.value),
+      };
+    }
+
+    async function save({ silent = false } = {}) {
+      if (!ME) return false;
+      const cfg = readForm();
+      const adults = members.filter(m => m.role === "adult");
+      const error = validateConfig(cfg, adults);
+      const errEl = el("form-error");
+      if (error) { errEl.textContent = error; errEl.hidden = false; return false; }
+      errEl.hidden = true;
+
+      const now = new Date().toISOString();
+      if (row) {
+        await db(
+          "UPDATE switches SET interval_hours = ?, message = ?, recipient_member_ids = ?, updated_at = ? WHERE member_id = ?",
+          [cfg.intervalHours, cfg.message, JSON.stringify(cfg.recipientIds), now, ME.id],
+        );
+      } else {
+        await db(
+          "INSERT INTO switches (id, member_id, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?, ?, ?)",
+          [crypto.randomUUID(), ME.id, cfg.intervalHours, cfg.message, JSON.stringify(cfg.recipientIds), now, now],
+        );
+      }
+      await loadRow();
+      if (!silent) renderAll();
+      return true;
+    }
+
+    async function checkIn() {
+      const res = await fetch(CHECK_IN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (res.status === 402) {
+        entitled = false;
+        renderBanners();
+        return false;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        await hubAlert(data.error ?? "Check-in failed");
+        return false;
+      }
+      entitled = true;
+      await loadRow();
+      renderAll();
+      return true;
+    }
+
+    async function arm() {
+      if (!(await save({ silent: true }))) return;
+      await db("UPDATE switches SET active = 1, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
+      await loadRow();
+      // First check-in starts the server-side clock; a 402 here means the
+      // household lacks the Premium capabilities — disarm again so nobody
+      // believes an unmonitored switch is protecting them.
+      if (!(await checkIn())) {
+        await db("UPDATE switches SET active = 0, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
+        await loadRow();
+      }
+      renderAll();
+    }
+
+    async function disarm() {
+      await db("UPDATE switches SET active = 0, updated_at = ? WHERE member_id = ?", [new Date().toISOString(), ME.id]);
+      await loadRow();
+      renderAll();
+    }
+
+    el("save-btn").addEventListener("click", () => save());
+    el("arm-btn").addEventListener("click", arm);
+    el("disarm-btn").addEventListener("click", disarm);
+    el("checkin-btn").addEventListener("click", checkIn);
+
+    (async function init() {
+      await Promise.all([loadMembers(), loadRow(), loadEntitlement()]);
+      if (!row && ME) {
+        // Materialize the row on first visit so arm/check-in have a target.
+        await save({ silent: true });
+      }
+      renderAll();
+      setInterval(renderStatus, 60_000); // keep the countdown fresh
+    })();
+  </script>
+</body>
+</html>

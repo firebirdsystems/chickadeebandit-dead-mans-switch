@@ -1,0 +1,16 @@
+{
+  "name": "chickadeebandit-dead-mans-switch",
+  "version": "1.0.0",
+  "description": "Dead-man's switch: scheduled check-ins with alert emails to chosen household members when you go silent",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

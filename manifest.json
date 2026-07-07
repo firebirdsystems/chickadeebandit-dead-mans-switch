@@ -1,0 +1,50 @@
+{
+  "id": "dead-mans-switch",
+  "name": "Check-In Switch",
+  "version": "1.0.0",
+  "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message.",
+  "entrypoint": "index.html",
+  "runtime": "static",
+  "category": "general",
+  "tags": [
+    "safety",
+    "check-in",
+    "alerts"
+  ],
+  "data_access": {
+    "reads": [
+      "family.members"
+    ],
+    "writes": []
+  },
+  "permissions": {
+    "default_audience": "everyone",
+    "requires_approval": false
+  },
+  "storage": "db",
+  "row_policies": {
+    "switches": {
+      "kind": "owner_only",
+      "member_column": "member_id",
+      "adults_bypass": false
+    }
+  },
+  "icon": "\ud83d\udedf",
+  "nav": {
+    "label": "Check-In Switch"
+  },
+  "required_capabilities": [
+    "cron",
+    "email"
+  ],
+  "inactivity_alerts": {
+    "table": "switches",
+    "member_column": "member_id",
+    "active_column": "active",
+    "interval_hours_column": "interval_hours",
+    "last_checkin_column": "last_checkin_at",
+    "last_alerted_column": "last_alerted_at",
+    "message_column": "message",
+    "recipients_column": "recipient_member_ids"
+  }
+}
