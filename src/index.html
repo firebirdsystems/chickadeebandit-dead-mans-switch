@@ -87,6 +87,30 @@
     .recipient { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.95rem; }
     .recipient input { width: 16px; height: 16px; }
 
+    .ext-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
+    .ext-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--hub-bg, #f3f4f6); border: 1px solid var(--hub-border, #e5e7eb);
+      border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 0.85rem; max-width: 100%;
+    }
+    .ext-chip .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ext-chip .badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 999px; }
+    .ext-chip .badge.confirmed { background: #d1fae5; color: #065f46; }
+    .ext-chip .badge.pending { background: #fef3c7; color: #92400e; }
+    .ext-chip .badge.unsubscribed { background: #fee2e2; color: #991b1b; }
+    .ext-chip .x { background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--hub-text-muted, #6b7280); font-size: 1rem; font-weight: 700; }
+    .add-external { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .add-external input[type="email"] { flex: 2; min-width: 160px; }
+    .add-external input[type="text"] { flex: 1; min-width: 110px; }
+    .add-external button { flex-shrink: 0; padding: 9px 14px; }
+    .picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .picker .pick { background: transparent; border: 1px dashed var(--hub-border, #d1d5db); border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; font-weight: 500; color: var(--hub-text, #111827); }
+    input[type="email"] {
+      font: inherit; width: 100%;
+      border: 1px solid var(--hub-border, #d1d5db); border-radius: 8px;
+      padding: 9px 10px; background: var(--hub-surface, #fff); color: inherit;
+    }
+
     .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
     .actions .spacer { flex: 1; }
     .error { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; }
@@ -121,8 +145,8 @@
       <button id="add-btn" class="btn-primary">+ Add a switch</button>
     </div>
 
-    <p class="hint" style="margin-top:20px">Alerts are sent by email to household members only. Monitoring runs on the hub's servers —
-      it works even when nobody has the app open.</p>
+    <p class="hint" style="margin-top:20px">Alerts are sent by email to household members and to external contacts who have confirmed by email (double opt-in).
+      Monitoring runs on the hub's servers — it works even when nobody has the app open.</p>
   </div>
 
   <template id="switch-tpl">
@@ -152,6 +176,16 @@
       <div data-el="recipients"></div>
       <p class="hint">Leave everyone unchecked to alert all adults in the household.</p>
 
+      <label>External email contacts</label>
+      <div class="ext-chips" data-el="external-list"></div>
+      <div class="add-external">
+        <input type="email" data-el="external-email" placeholder="name@example.com" />
+        <input type="text" data-el="external-name" maxlength="120" placeholder="Name (optional)" />
+        <button class="btn-ghost" data-action="add-external" type="button">Invite</button>
+      </div>
+      <div class="picker" data-el="contacts-picker"></div>
+      <p class="hint">External contacts must confirm by email before they'll ever be alerted (double opt-in). Only confirmed contacts receive alerts.</p>
+
       <div class="actions">
         <button class="btn-primary" data-action="save">Save</button>
         <button class="btn-primary" data-action="arm">Arm switch</button>
@@ -167,7 +201,8 @@
     import { esc, hubAlert, hubConfirm } from "/hub-sdk.js";
     import {
       hoursToWeeks, weeksToHours, intervalLabel, switchStatus, formatRemaining,
-      validateConfig, recipientsSummary, switchTitle, MAX_SWITCHES,
+      validateConfig, recipientsSummary, switchTitle, normalizeEmail, isValidEmail,
+      MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS,
     } from "./logic.js";
 
     const DB = window.__DB_URL ?? "";
@@ -175,10 +210,14 @@
     const APP_ID = window.__APP_ID ?? "dead-mans-switch";
     const ME = window.__CURRENT_MEMBER ?? null;
     const CHECK_IN = `/run/${APP_ID}/api/check-in`;
+    const XC_INVITE = window.__EXTERNAL_CONTACTS_INVITE_URL ?? "";
+    const XC_LIST = window.__EXTERNAL_CONTACTS_LIST_URL ?? "";
 
     let members = [];
     let rows = [];          // my switch rows
     let entitled = null;    // null until the status endpoint answers
+    let externalContacts = new Map(); // normalized email → { status, name }
+    let contactsBook = [];  // optional prefill from the contacts app: [{name, email}]
 
     async function db(sql, params = []) {
       if (!DB) return { rows: [] };
@@ -213,6 +252,46 @@
         const data = await res.json();
         entitled = !!data.entitled;
       } catch { entitled = null; }
+    }
+
+    // The household-wide double-opt-in registry: normalized email → status.
+    async function loadExternalContacts() {
+      externalContacts = new Map();
+      if (!XC_LIST) return;
+      try {
+        const res = await fetch(XC_LIST, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+        });
+        if (!res.ok) return;
+        const { contacts } = await res.json();
+        for (const c of contacts ?? []) {
+          externalContacts.set(normalizeEmail(c.email), { status: c.status, name: c.name || "" });
+        }
+      } catch { /* leave empty */ }
+    }
+
+    // Optional convenience: emails from the contacts app to offer as quick-adds.
+    async function loadContactsBook() {
+      contactsBook = [];
+      try {
+        const res = await fetch(`${CONTEXT}?keys=app.contacts.contact_emails`);
+        const list = (await res.json())["app.contacts.contact_emails"];
+        if (Array.isArray(list)) {
+          contactsBook = list
+            .filter(c => c && isValidEmail(c.email))
+            .map(c => ({ name: String(c.name || "").trim(), email: normalizeEmail(c.email) }));
+        }
+      } catch { contactsBook = []; }
+    }
+
+    function contactStatus(email) {
+      return externalContacts.get(normalizeEmail(email))?.status ?? "pending";
+    }
+    function contactName(email) {
+      const norm = normalizeEmail(email);
+      return externalContacts.get(norm)?.name
+        || contactsBook.find(c => c.email === norm)?.name
+        || "";
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────────
@@ -313,10 +392,51 @@
             </label>`).join("")
         : '<p class="hint">No other adults in the household yet — invite someone first.</p>';
 
+      const selectedEmails = JSON.parse(row.recipient_emails || "[]");
+      renderExternalList(node, selectedEmails);
+      renderContactsPicker(node);
+
       const armed = Number(row.active) === 1;
       node.querySelector('[data-action="arm"]').hidden = armed;
       node.querySelector('[data-action="disarm"]').hidden = !armed;
       return node;
+    }
+
+    const BADGE_LABEL = { confirmed: "Confirmed", pending: "Pending", unsubscribed: "Unsubscribed" };
+
+    // The per-switch selection of external emails lives in the DOM chips; this
+    // reads them back so a Save persists exactly what's shown.
+    function selectedExternalEmails(node) {
+      return [...node.querySelectorAll('[data-el="external-list"] .ext-chip')].map(c => c.dataset.email);
+    }
+
+    function renderExternalList(node, emails) {
+      const list = node.querySelector('[data-el="external-list"]');
+      const unique = [...new Set(emails.map(normalizeEmail))];
+      list.innerHTML = unique.map(email => {
+        const status = contactStatus(email);
+        const name = contactName(email);
+        const who = name ? `${esc(name)} · ${esc(email)}` : esc(email);
+        return `<span class="ext-chip" data-email="${esc(email)}">
+            <span class="who">${who}</span>
+            <span class="badge ${status}">${BADGE_LABEL[status] ?? "Pending"}</span>
+            <button type="button" class="x" data-action="remove-external" title="Remove">×</button>
+          </span>`;
+      }).join("");
+      renderContactsPicker(node);
+    }
+
+    function renderContactsPicker(node) {
+      const picker = node.querySelector('[data-el="contacts-picker"]');
+      if (!picker) return;
+      const chosen = new Set(selectedExternalEmails(node));
+      const options = contactsBook.filter(c => !chosen.has(c.email));
+      picker.innerHTML = options.length
+        ? `<span class="hint" style="width:100%">Quick-add from Contacts:</span>` + options.slice(0, 12).map(c =>
+            `<button type="button" class="pick" data-action="pick-contact" data-email="${esc(c.email)}" data-name="${esc(c.name)}">
+              + ${esc(c.name || c.email)}
+            </button>`).join("")
+        : "";
     }
 
     function statusText(row, status) {
@@ -332,7 +452,9 @@
           detail: `Deadline passed ${formatRemaining(status.overdueMs)} ago. Check in to reset.`,
         };
       }
-      const who = recipientsSummary(JSON.parse(row.recipient_member_ids || "[]"), members, ME?.id);
+      const who = recipientsSummary(
+        JSON.parse(row.recipient_member_ids || "[]"), members, ME?.id, JSON.parse(row.recipient_emails || "[]"),
+      );
       return {
         headline: status.state === "due_soon" ? "Check in soon" : "All good",
         detail: `Next check-in due in ${formatRemaining(status.remainingMs)} (${intervalLabel(row.interval_hours)} interval). Alerts go to: ${who}.`,
@@ -389,6 +511,7 @@
         intervalWeeks: Number(q("weeks").value),
         message: q("message").value.trim(),
         recipientIds: [...q("recipients").querySelectorAll("input:checked")].map(i => i.value),
+        recipientEmails: selectedExternalEmails(node),
       };
     }
 
@@ -406,8 +529,8 @@
       showCardError(node, null);
 
       await db(
-        "UPDATE switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
-        [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), new Date().toISOString(), id, ME.id],
+        "UPDATE switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+        [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
       );
       await loadRows();
       // Re-render only this card (reflects the saved label/status); other cards
@@ -498,6 +621,49 @@
       refreshStatuses();
     }
 
+    // Add an external email chip to a card's selection (no server call yet).
+    function addExternalChip(node, email, name) {
+      const norm = normalizeEmail(email);
+      const current = selectedExternalEmails(node);
+      if (current.includes(norm)) return true;
+      if (current.length >= MAX_EXTERNAL_RECIPIENTS) {
+        showCardError(node, `You can add up to ${MAX_EXTERNAL_RECIPIENTS} external contacts per switch.`);
+        return false;
+      }
+      if (name && !externalContacts.has(norm)) externalContacts.set(norm, { status: "pending", name });
+      renderExternalList(node, [...current, norm]);
+      return true;
+    }
+
+    // Invite (double opt-in) an external email, then attach it to this switch.
+    async function inviteExternal(node, email, name) {
+      const norm = normalizeEmail(email);
+      if (!isValidEmail(norm)) { showCardError(node, "Enter a valid email address."); return; }
+      if (!XC_INVITE) { showCardError(node, "External contacts aren't available for this app."); return; }
+      showCardError(node, null);
+
+      // Skip the invite call when the address is already confirmed household-wide.
+      const known = externalContacts.get(norm);
+      if (known?.status !== "confirmed") {
+        const res = await fetch(XC_INVITE, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: norm, name: name || undefined }),
+        });
+        if (res.status === 402) { entitled = false; renderBanner(); showCardError(node, "Adding external contacts needs the Premium capability bundle."); return; }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showCardError(node, data.error ?? "Couldn't send the confirmation email.");
+          return;
+        }
+        const { contact } = await res.json();
+        if (contact) externalContacts.set(norm, { status: contact.status, name: contact.name || name || "" });
+      }
+      if (!addExternalChip(node, norm, name)) return;
+      // Persist immediately so the confirmed-later contact is already linked.
+      await saveCard(node, { silent: true });
+      syncCard(node.dataset.id);
+    }
+
     el("switches").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
       if (!btn) return;
@@ -508,13 +674,27 @@
       else if (action === "arm") armCard(node);
       else if (action === "disarm") disarmCard(node);
       else if (action === "delete") deleteSwitch(node);
+      else if (action === "add-external") {
+        const emailInput = node.querySelector('[data-el="external-email"]');
+        const nameInput = node.querySelector('[data-el="external-name"]');
+        inviteExternal(node, emailInput.value, nameInput.value.trim());
+        emailInput.value = ""; nameInput.value = "";
+      }
+      else if (action === "pick-contact") inviteExternal(node, btn.dataset.email, btn.dataset.name || "");
+      else if (action === "remove-external") {
+        const chip = btn.closest(".ext-chip");
+        const remaining = selectedExternalEmails(node).filter(em => em !== chip.dataset.email);
+        renderExternalList(node, remaining);
+      }
     });
 
     el("add-btn").addEventListener("click", addSwitch);
     el("checkin-btn").addEventListener("click", checkIn);
 
     (async function init() {
-      await Promise.all([loadMembers(), loadRows(), loadEntitlement()]);
+      await Promise.all([
+        loadMembers(), loadRows(), loadEntitlement(), loadExternalContacts(), loadContactsBook(),
+      ]);
       renderAll();
       setInterval(refreshStatuses, 60_000); // keep the countdowns fresh
     })();

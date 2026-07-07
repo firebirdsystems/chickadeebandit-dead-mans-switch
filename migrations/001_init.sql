@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS app_dead_mans_switch__switches (
   active               INTEGER NOT NULL DEFAULT 0,     -- 0 = disarmed, 1 = armed
   interval_hours       INTEGER NOT NULL DEFAULT 168,   -- silence window before the alert fires (min 1 week)
   message              TEXT    NOT NULL DEFAULT '',    -- included in the alert email
-  recipient_member_ids TEXT    NOT NULL DEFAULT '[]',  -- JSON array; empty = all adults
+  recipient_member_ids TEXT    NOT NULL DEFAULT '[]',  -- JSON array of member ids; empty = all adults
+  recipient_emails     TEXT    NOT NULL DEFAULT '[]',  -- JSON array of external emails; only CONFIRMED ones (hub external-contacts registry) are alerted
   last_checkin_at      TEXT,                           -- ISO, endpoint-stamped
   last_alerted_at      TEXT,                           -- ISO, cron-stamped per switch (dedupe)
   created_at           TEXT    NOT NULL,

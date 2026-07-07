@@ -17,8 +17,8 @@ describe("manifest.json", () => {
   it("entrypoint is index.html", () => expect(manifest.entrypoint).toBe("index.html"));
   it("runtime is static", () => expect(manifest.runtime).toBe("static"));
   it("uses db storage", () => expect(manifest.storage).toBe("db"));
-  it("reads only family.members", () => {
-    expect(manifest.data_access.reads).toEqual(["family.members"]);
+  it("reads family.members and the contacts email export (prefill picker)", () => {
+    expect(manifest.data_access.reads).toEqual(["family.members", "app.contacts.contact_emails"]);
     expect(manifest.data_access.writes).toEqual([]);
   });
 
@@ -66,5 +66,22 @@ describe("inactivity_alerts protocol config", () => {
   it("the switch table is owner_only so members only see their own switch", () => {
     const policy = manifest.row_policies[cfg.table];
     expect(policy).toMatchObject({ kind: "owner_only", member_column: cfg.member_column });
+  });
+});
+
+describe("external contacts (double opt-in)", () => {
+  const cfg = manifest.inactivity_alerts;
+
+  it("declares the external_contacts protocol", () => {
+    expect(manifest.external_contacts).toBeTruthy();
+  });
+
+  it("routes alerts to an external_recipients_column that exists in the migration", () => {
+    expect(cfg.external_recipients_column).toBe("recipient_emails");
+    expect(migration).toMatch(new RegExp(`^\\s+${cfg.external_recipients_column}\\s`, "m"));
+  });
+
+  it("keeps external_recipients_column distinct from the member recipients column", () => {
+    expect(cfg.external_recipients_column).not.toBe(cfg.recipients_column);
   });
 });

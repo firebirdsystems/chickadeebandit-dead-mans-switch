@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  HOURS_PER_WEEK, MIN_WEEKS, MAX_WEEKS,
+  HOURS_PER_WEEK, MIN_WEEKS, MAX_WEEKS, MAX_EXTERNAL_RECIPIENTS,
   weeksToHours, hoursToWeeks, intervalLabel,
   switchStatus, formatRemaining, validateConfig, recipientsSummary, switchTitle,
+  isValidEmail, normalizeEmail,
 } from "../src/logic.js";
 
 const now = new Date("2026-07-07T12:00:00Z");
@@ -86,6 +87,30 @@ describe("validateConfig", () => {
     expect(validateConfig({ intervalWeeks: 1, message: "x".repeat(2001), recipientIds: [] }, adults)).toMatch(/too long/);
     expect(validateConfig({ intervalWeeks: 1, message: "", recipientIds: ["kid-1"] }, adults)).toMatch(/adult/);
   });
+
+  it("accepts valid external recipient emails", () => {
+    expect(validateConfig({ intervalWeeks: 1, recipientIds: [], recipientEmails: ["a@b.com", "c@d.org"] }, adults)).toBeNull();
+    expect(validateConfig({ intervalWeeks: 1, recipientIds: [], recipientEmails: [] }, adults)).toBeNull();
+  });
+
+  it("rejects malformed emails, too many, or a non-list", () => {
+    expect(validateConfig({ intervalWeeks: 1, recipientIds: [], recipientEmails: ["not-an-email"] }, adults)).toMatch(/valid email/);
+    expect(validateConfig({ intervalWeeks: 1, recipientIds: [], recipientEmails: "a@b.com" }, adults)).toMatch(/must be a list/);
+    const tooMany = Array.from({ length: MAX_EXTERNAL_RECIPIENTS + 1 }, (_, i) => `p${i}@x.com`);
+    expect(validateConfig({ intervalWeeks: 1, recipientIds: [], recipientEmails: tooMany }, adults)).toMatch(/up to/);
+  });
+});
+
+describe("email helpers", () => {
+  it("validates email shape", () => {
+    expect(isValidEmail("a@b.com")).toBe(true);
+    expect(isValidEmail(" a@b.com ")).toBe(true);
+    expect(isValidEmail("nope")).toBe(false);
+    expect(isValidEmail("a@b")).toBe(false);
+  });
+  it("normalizes to trimmed lowercase", () => {
+    expect(normalizeEmail("  A@B.Com ")).toBe("a@b.com");
+  });
 });
 
 describe("recipientsSummary", () => {
@@ -98,6 +123,11 @@ describe("recipientsSummary", () => {
   it("names explicit recipients, falls back to all adults minus self", () => {
     expect(recipientsSummary(["a2"], members, "me")).toBe("Jordan");
     expect(recipientsSummary([], members, "me")).toBe("Jordan (all adults)");
+  });
+
+  it("appends a count of external contacts", () => {
+    expect(recipientsSummary(["a2"], members, "me", ["x@y.com"])).toBe("Jordan + 1 external contact");
+    expect(recipientsSummary([], members, "me", ["x@y.com", "z@w.com"])).toBe("Jordan (all adults) + 2 external contacts");
   });
 });
 

@@ -13,7 +13,8 @@
   ],
   "data_access": {
     "reads": [
-      "family.members"
+      "family.members",
+      "app.contacts.contact_emails"
     ],
     "writes": []
   },
@@ -46,6 +47,8 @@
     "last_checkin_column": "last_checkin_at",
     "last_alerted_column": "last_alerted_at",
     "message_column": "message",
-    "recipients_column": "recipient_member_ids"
-  }
+    "recipients_column": "recipient_member_ids",
+    "external_recipients_column": "recipient_emails"
+  },
+  "external_contacts": {}
 }
