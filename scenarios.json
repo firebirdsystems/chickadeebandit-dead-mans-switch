@@ -1,0 +1,54 @@
+{
+  "scenarios": [
+    {
+      "name": "switches (message, recipients) are private even from other adults; other members cannot alter them",
+      "members": { "owner": "adult", "other": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, 1, 168, ?, '[]', '[]', ?, ?)",
+          "params": ["sw1", "{{owner}}", "Close family", "the vault code is 4711", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "owner",
+          "sql": "SELECT id, message FROM app_dead_mans_switch__switches",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "sw1" }] }
+        },
+        {
+          "action": "db",
+          "as": "other",
+          "sql": "SELECT id, message FROM app_dead_mans_switch__switches",
+          "expect": { "status": 200, "rowCount": 0 }
+        },
+        {
+          "action": "db",
+          "as": "other",
+          "sql": "UPDATE app_dead_mans_switch__switches SET active = 0 WHERE id = ?",
+          "params": ["sw1"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "owner",
+          "sql": "SELECT active FROM app_dead_mans_switch__switches WHERE id = ?",
+          "params": ["sw1"],
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "active": 1 }] }
+        },
+        {
+          "action": "db",
+          "as": "other",
+          "sql": "DELETE FROM app_dead_mans_switch__switches WHERE id = ?",
+          "params": ["sw1"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "owner",
+          "sql": "SELECT id FROM app_dead_mans_switch__switches",
+          "expect": { "status": 200, "rowCount": 1 }
+        }
+      ]
+    }
+  ]
+}

@@ -239,7 +239,7 @@
     async function loadRows() {
       if (!ME) { rows = []; return; }
       const { rows: r } = await db(
-        "SELECT * FROM switches WHERE member_id = ? ORDER BY created_at",
+        "SELECT * FROM app_dead_mans_switch__switches WHERE member_id = ? ORDER BY created_at",
         [ME.id],
       );
       rows = r ?? [];
@@ -529,7 +529,7 @@
       showCardError(node, null);
 
       await db(
-        "UPDATE switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+        "UPDATE app_dead_mans_switch__switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
         [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
       );
       await loadRows();
@@ -545,7 +545,7 @@
       const now = new Date().toISOString();
       const hadCards = !!el("switches").querySelector(".switch-card");
       await db(
-        "INSERT INTO switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
+        "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
         [id, ME.id, now, now],
       );
       await loadRows();
@@ -561,7 +561,7 @@
       const row = rows.find(r => r.id === id);
       const name = switchTitle(row, members, ME?.id);
       if (!(await hubConfirm(`Delete the switch “${name}”? This can't be undone.`))) return;
-      await db("DELETE FROM switches WHERE id = ? AND member_id = ?", [id, ME.id]);
+      await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
       await loadRows();
       // Drop just this card; rebuild only to show the empty state once none remain.
       if (rows.length === 0) renderSwitches(); else node.remove();
@@ -598,13 +598,13 @@
     async function armCard(node) {
       const id = node.dataset.id;
       if (!(await saveCard(node, { silent: true }))) return;
-      await db("UPDATE switches SET active = 1, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+      await db("UPDATE app_dead_mans_switch__switches SET active = 1, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
       await loadRows();
       // The first check-in starts the server-side clock; a 402 here means the
       // household lacks the Premium capabilities — disarm again so nobody
       // believes an unmonitored switch is protecting them.
       if (!(await checkIn({ render: false }))) {
-        await db("UPDATE switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+        await db("UPDATE app_dead_mans_switch__switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
         await loadRows();
       }
       // Rebuild just this card (its buttons + fields now reflect the armed,
@@ -615,7 +615,7 @@
 
     async function disarmCard(node) {
       const id = node.dataset.id;
-      await db("UPDATE switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+      await db("UPDATE app_dead_mans_switch__switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
       await loadRows();
       syncCard(id);
       refreshStatuses();
