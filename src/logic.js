@@ -5,6 +5,7 @@ export const MIN_WEEKS = 1;
 export const MAX_WEEKS = 104; // two years — a sane ceiling for the weeks input
 export const MAX_SWITCHES = 10; // per member; keeps the list (and email fan-out) bounded
 export const MAX_EXTERNAL_RECIPIENTS = 10; // per switch; bounds the external email fan-out
+export const MAX_ATTACHMENTS = 10; // per switch; files shared through the trigger link
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -113,6 +114,23 @@ export function recipientsSummary(recipientIds, members, selfId, recipientEmails
     base = adults.length > 0 ? `${adults.join(", ")} (all adults)` : (externalLabel ? "" : "No eligible recipients yet");
   }
   return [base, externalLabel].filter(Boolean).join(" + ");
+}
+
+/** Parse a switches row's attachment_file_ids cell into a string array. */
+export function parseAttachmentIds(raw) {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]"));
+    if (Array.isArray(parsed)) return parsed.filter(v => typeof v === "string");
+  } catch { /* fall through */ }
+  return [];
+}
+
+/** "512 B" / "3.4 KB" / "1.2 MB" for the attachment list. */
+export function formatFileSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Display name for a switch: its label, or a recipients-derived fallback. */

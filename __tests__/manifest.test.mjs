@@ -85,3 +85,28 @@ describe("external contacts (double opt-in)", () => {
     expect(cfg.external_recipients_column).not.toBe(cfg.recipients_column);
   });
 });
+
+describe("trigger share link (shareable + share_item_type)", () => {
+  const migration002 = readFileSync(join(__dirname, "../migrations/002_attachments.sql"), "utf-8");
+  const share = manifest.shareable?.switch;
+
+  it("declares a shareable switch item the alert cron can mint links for", () => {
+    expect(share).toBeTruthy();
+    expect(manifest.inactivity_alerts.share_item_type).toBe("switch");
+    expect(share.table).toBe(manifest.inactivity_alerts.table);
+  });
+
+  it("projects ONLY the label, message, and attachments — never recipients or timestamps", () => {
+    expect(share.title_column).toBe("label");
+    expect(share.columns.map((c) => c.column)).toEqual(["message"]);
+    expect(share.files.ids_column).toBe("attachment_file_ids");
+  });
+
+  it("restricts minting to the switch owner (owner_column, matching owner_only rows)", () => {
+    expect(share.owner_column).toBe(manifest.row_policies.switches.member_column);
+  });
+
+  it("the attachments column exists via migration 002", () => {
+    expect(migration002).toMatch(/ADD COLUMN attachment_file_ids TEXT NOT NULL DEFAULT '\[\]'/);
+  });
+});

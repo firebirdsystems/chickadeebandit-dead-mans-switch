@@ -99,6 +99,16 @@
     .ext-chip .badge.pending { background: #fef3c7; color: #92400e; }
     .ext-chip .badge.unsubscribed { background: #fee2e2; color: #991b1b; }
     .ext-chip .x { background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--hub-text-muted, #6b7280); font-size: 1rem; font-weight: 700; }
+    .attachments { margin: 4px 0; }
+    .attachment {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; font-size: 0.9rem;
+    }
+    .attachment .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .attachment .file-size { color: var(--hub-text-muted, #6b7280); font-size: 0.8rem; flex-shrink: 0; }
+    .attachment .x { background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--hub-text-muted, #6b7280); font-size: 1rem; font-weight: 700; flex-shrink: 0; }
+    .add-attachment { margin-top: 6px; }
+
     .add-external { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
     .add-external input[type="email"] { flex: 2; min-width: 160px; }
     .add-external input[type="text"] { flex: 1; min-width: 110px; }
@@ -172,6 +182,14 @@
       <label>Message to include in the alert</label>
       <textarea data-el="message" maxlength="2000" placeholder="What should they know or do if you go quiet? (optional)"></textarea>
 
+      <label>Files for your contacts</label>
+      <div class="attachments" data-el="attachments"></div>
+      <div class="add-attachment">
+        <input type="file" data-el="file-input" hidden />
+        <button class="btn-ghost" data-action="add-file" type="button">📎 Attach a file</button>
+      </div>
+      <p class="hint">If this switch triggers, the alert email includes a private link where your contacts can read your message and download these files — no account needed. Checking in again disables the link.</p>
+
       <label>Who gets alerted</label>
       <div data-el="recipients"></div>
       <p class="hint">Leave everyone unchecked to alert all adults in the household.</p>
@@ -202,10 +220,12 @@
     import {
       hoursToWeeks, weeksToHours, intervalLabel, switchStatus, formatRemaining,
       validateConfig, recipientsSummary, switchTitle, normalizeEmail, isValidEmail,
-      MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS,
+      parseAttachmentIds, formatFileSize,
+      MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS, MAX_ATTACHMENTS,
     } from "./logic.js";
 
     const DB = window.__DB_URL ?? "";
+    const FILES = window.__FILES_URL ?? "";
     const CONTEXT = window.__CONTEXT_URL ?? "";
     const APP_ID = window.__APP_ID ?? "dead-mans-switch";
     const ME = window.__CURRENT_MEMBER ?? null;
@@ -218,6 +238,7 @@
     let entitled = null;    // null until the status endpoint answers
     let externalContacts = new Map(); // normalized email → { status, name }
     let contactsBook = [];  // optional prefill from the contacts app: [{name, email}]
+    let filesMeta = new Map(); // fileId → { name, size } for attachment display
 
     async function db(sql, params = []) {
       if (!DB) return { rows: [] };
@@ -282,6 +303,19 @@
             .map(c => ({ name: String(c.name || "").trim(), email: normalizeEmail(c.email) }));
         }
       } catch { contactsBook = []; }
+    }
+
+    // Names/sizes for the files this app has stored (attachment display only —
+    // the ids on each switch row are the source of truth for what's attached).
+    async function loadFilesMeta() {
+      filesMeta = new Map();
+      if (!FILES) return;
+      try {
+        const res = await fetch(FILES);
+        if (!res.ok) return;
+        const { files } = await res.json();
+        for (const f of files ?? []) filesMeta.set(f.id, { name: f.originalName, size: f.sizeBytes });
+      } catch { /* leave empty */ }
     }
 
     function contactStatus(email) {
@@ -395,6 +429,7 @@
       const selectedEmails = JSON.parse(row.recipient_emails || "[]");
       renderExternalList(node, selectedEmails);
       renderContactsPicker(node);
+      renderAttachments(node, row);
 
       const armed = Number(row.active) === 1;
       node.querySelector('[data-action="arm"]').hidden = armed;
@@ -424,6 +459,23 @@
           </span>`;
       }).join("");
       renderContactsPicker(node);
+    }
+
+    // Attachments render from the persisted row (uploads save immediately),
+    // never from unsaved DOM state.
+    function renderAttachments(node, row) {
+      const list = node.querySelector('[data-el="attachments"]');
+      const ids = parseAttachmentIds(row.attachment_file_ids);
+      list.innerHTML = ids.map(id => {
+        const meta = filesMeta.get(id);
+        return `<div class="attachment" data-file-id="${esc(id)}">
+            <span class="file-name">📄 ${esc(meta?.name ?? "File")}</span>
+            <span class="file-size">${meta ? esc(formatFileSize(meta.size)) : ""}</span>
+            <button type="button" class="x" data-action="remove-attachment" title="Remove">×</button>
+          </div>`;
+      }).join("");
+      const btn = node.querySelector('[data-action="add-file"]');
+      if (btn) btn.disabled = !FILES || ids.length >= MAX_ATTACHMENTS;
     }
 
     function renderContactsPicker(node) {
@@ -561,8 +613,10 @@
       const row = rows.find(r => r.id === id);
       const name = switchTitle(row, members, ME?.id);
       if (!(await hubConfirm(`Delete the switch “${name}”? This can't be undone.`))) return;
+      const attachedIds = parseAttachmentIds(row?.attachment_file_ids);
       await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
       await loadRows();
+      await deleteUnreferencedFiles(attachedIds);
       // Drop just this card; rebuild only to show the empty state once none remain.
       if (rows.length === 0) renderSwitches(); else node.remove();
       renderOverall();
@@ -619,6 +673,65 @@
       await loadRows();
       syncCard(id);
       refreshStatuses();
+    }
+
+    // Upload a file and attach it to this switch. Persists immediately (like
+    // external invites) — the row's attachment_file_ids is the source of truth
+    // the hub projects through the trigger share link.
+    async function uploadAttachment(node, file) {
+      const id = node.dataset.id;
+      const row = rows.find(r => r.id === id);
+      if (!row || !FILES || !file) return;
+      const ids = parseAttachmentIds(row.attachment_file_ids);
+      if (ids.length >= MAX_ATTACHMENTS) {
+        showCardError(node, `You can attach up to ${MAX_ATTACHMENTS} files per switch.`);
+        return;
+      }
+      showCardError(node, null);
+
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(FILES, { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showCardError(node, data.error ?? "Upload failed — please try again.");
+        return;
+      }
+      const { id: fileId } = await res.json();
+      await db(
+        "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+        [JSON.stringify([...ids, fileId]), new Date().toISOString(), id, ME.id],
+      );
+      await Promise.all([loadRows(), loadFilesMeta()]);
+      const fresh = rows.find(r => r.id === id);
+      // Refresh only the attachment list; the rest of the card keeps its DOM
+      // so unsaved edits survive.
+      if (fresh) renderAttachments(node, fresh);
+    }
+
+    async function removeAttachment(node, fileId) {
+      const id = node.dataset.id;
+      const row = rows.find(r => r.id === id);
+      if (!row) return;
+      const ids = parseAttachmentIds(row.attachment_file_ids).filter(f => f !== fileId);
+      await db(
+        "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+        [JSON.stringify(ids), new Date().toISOString(), id, ME.id],
+      );
+      await loadRows();
+      await deleteUnreferencedFiles([fileId]);
+      const fresh = rows.find(r => r.id === id);
+      if (fresh) renderAttachments(node, fresh);
+    }
+
+    // Delete stored files that no switch of mine references any more (frees
+    // household storage; rows only ever hold the caller's switches).
+    async function deleteUnreferencedFiles(fileIds) {
+      if (!FILES) return;
+      const referenced = new Set(rows.flatMap(r => parseAttachmentIds(r.attachment_file_ids)));
+      await Promise.all(fileIds
+        .filter(fid => !referenced.has(fid))
+        .map(fid => fetch(`${FILES}/${fid}`, { method: "DELETE" }).catch(() => {})));
     }
 
     // Add an external email chip to a card's selection (no server call yet).
@@ -681,6 +794,10 @@
         emailInput.value = ""; nameInput.value = "";
       }
       else if (action === "pick-contact") inviteExternal(node, btn.dataset.email, btn.dataset.name || "");
+      else if (action === "add-file") node.querySelector('[data-el="file-input"]').click();
+      else if (action === "remove-attachment") {
+        removeAttachment(node, btn.closest(".attachment").dataset.fileId);
+      }
       else if (action === "remove-external") {
         const chip = btn.closest(".ext-chip");
         const remaining = selectedExternalEmails(node).filter(em => em !== chip.dataset.email);
@@ -688,12 +805,22 @@
       }
     });
 
+    // File picker changes bubble up from each card's hidden input.
+    el("switches").addEventListener("change", (e) => {
+      const input = e.target.closest('[data-el="file-input"]');
+      if (!input) return;
+      const node = input.closest(".switch-card");
+      const file = input.files?.[0];
+      input.value = "";
+      if (node && file) uploadAttachment(node, file);
+    });
+
     el("add-btn").addEventListener("click", addSwitch);
     el("checkin-btn").addEventListener("click", checkIn);
 
     (async function init() {
       await Promise.all([
-        loadMembers(), loadRows(), loadEntitlement(), loadExternalContacts(), loadContactsBook(),
+        loadMembers(), loadRows(), loadEntitlement(), loadExternalContacts(), loadContactsBook(), loadFilesMeta(),
       ]);
       renderAll();
       setInterval(refreshStatuses, 60_000); // keep the countdowns fresh

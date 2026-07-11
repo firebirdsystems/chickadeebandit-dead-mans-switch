@@ -153,3 +153,22 @@ describe("constants", () => {
     expect(MAX_WEEKS).toBeGreaterThan(MIN_WEEKS);
   });
 });
+
+describe("attachments", () => {
+  it("parseAttachmentIds parses a JSON array and degrades junk to []", async () => {
+    const { parseAttachmentIds } = await import("../src/logic.js");
+    expect(parseAttachmentIds('["f-1","f-2"]')).toEqual(["f-1", "f-2"]);
+    expect(parseAttachmentIds(null)).toEqual([]);
+    expect(parseAttachmentIds("not json")).toEqual([]);
+    expect(parseAttachmentIds('{"a":1}')).toEqual([]);
+    expect(parseAttachmentIds('[1, "f-1", null]')).toEqual(["f-1"]);
+  });
+
+  it("formatFileSize renders human-readable sizes", async () => {
+    const { formatFileSize, MAX_ATTACHMENTS } = await import("../src/logic.js");
+    expect(formatFileSize(512)).toBe("512 B");
+    expect(formatFileSize(2048)).toBe("2.0 KB");
+    expect(formatFileSize(3 * 1024 * 1024)).toBe("3.0 MB");
+    expect(MAX_ATTACHMENTS).toBeGreaterThan(0);
+  });
+});

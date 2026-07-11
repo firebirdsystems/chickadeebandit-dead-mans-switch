@@ -2,7 +2,7 @@
   "id": "dead-mans-switch",
   "name": "Check-In Switch",
   "version": "1.0.0",
-  "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message.",
+  "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message and a link to any files you left for them.",
   "entrypoint": "index.html",
   "runtime": "static",
   "category": "general",
@@ -30,7 +30,7 @@
       "adults_bypass": false
     }
   },
-  "icon": "\ud83d\udedf",
+  "icon": "🛟",
   "nav": {
     "label": "Check-In Switch"
   },
@@ -48,7 +48,25 @@
     "last_alerted_column": "last_alerted_at",
     "message_column": "message",
     "recipients_column": "recipient_member_ids",
-    "external_recipients_column": "recipient_emails"
+    "external_recipients_column": "recipient_emails",
+    "share_item_type": "switch"
   },
-  "external_contacts": {}
+  "external_contacts": {},
+  "file_acls": {
+    "read": "uploader_only"
+  },
+  "shareable": {
+    "switch": {
+      "table": "switches",
+      "title_column": "label",
+      "owner_column": "member_id",
+      "columns": [
+        { "column": "message", "label": "Message", "format": "multiline" }
+      ],
+      "files": {
+        "ids_column": "attachment_file_ids",
+        "label": "Files left for you"
+      }
+    }
+  }
 }
