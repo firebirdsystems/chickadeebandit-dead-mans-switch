@@ -1,7 +1,7 @@
 {
   "id": "dead-mans-switch",
   "name": "Check-In Switch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message and a link to any files you left for them.",
   "entrypoint": "index.html",
   "runtime": "static",
@@ -61,12 +61,17 @@
       "title_column": "label",
       "owner_column": "member_id",
       "columns": [
-        { "column": "message", "label": "Message", "format": "multiline" }
+        {
+          "column": "message",
+          "label": "Message",
+          "format": "multiline"
+        }
       ],
       "files": {
         "ids_column": "attachment_file_ids",
         "label": "Files left for you"
       }
     }
-  }
+  },
+  "kiosk": "never"
 }
