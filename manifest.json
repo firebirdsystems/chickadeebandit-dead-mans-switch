@@ -1,5 +1,6 @@
 {
   "id": "dead-mans-switch",
+  "contexts": ["household", "shared_space"],
   "name": "Check-In Switch",
   "version": "1.0.1",
   "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message and a link to any files you left for them.",
