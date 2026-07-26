@@ -24,6 +24,7 @@
     "requires_approval": false
   },
   "storage": "db",
+  "db_plaintext_columns": ["last_checkin_at", "last_alerted_at"],
   "row_policies": {
     "switches": {
       "kind": "owner_only",
