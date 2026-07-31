@@ -110,3 +110,19 @@ describe("trigger share link (shareable + share_item_type)", () => {
     expect(migration002).toMatch(/ADD COLUMN attachment_file_ids TEXT NOT NULL DEFAULT '\[\]'/);
   });
 });
+
+// Member removal (manifest.member_references). Deleting a departed member's
+// switch used to strand its attachments: `file_id_column` reclaims ONE file per
+// row, and this app stores a JSON array. With `files.read: "uploader_only"` the
+// orphans were unreadable by every remaining member and still counted against
+// household storage — reclaimable by nobody, forever. `file_id_list_column`
+// reads the array through the app-db codec (the column is encrypted at rest —
+// `_ids` is not a plaintext suffix) and reclaims every id in it.
+describe("member_references", () => {
+  it("reclaims every attachment when a departed member's switch is deleted", () => {
+    expect(manifest.member_references.switches).toEqual([
+      { column: "member_id", on_removed: "delete", file_id_list_column: "attachment_file_ids" },
+      { column: "recipient_member_ids", on_removed: "prune_list" },
+    ]);
+  });
+});

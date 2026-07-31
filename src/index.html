@@ -247,7 +247,13 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sql, params }),
       });
-      return res.json();
+      const json = await res.json();
+      // The hub reports a refused write as a JSON body with an `error` key
+      // (403 row policy, 400 bad statement, 507 over quota). fetch() does not
+      // reject on those, so without this throw every caller's rollback and
+      // error toast below is unreachable code.
+      if (!res.ok || json.error) throw new Error(json.error || `Database request failed (${res.status})`);
+      return json;
     }
 
     async function loadMembers() {
@@ -625,11 +631,21 @@
 
     // Global check-in: the hub stamps last_checkin on every switch we own.
     async function checkIn({ render = true } = {}) {
-      const res = await fetch(CHECK_IN, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      // fetch() REJECTS on a dropped connection, and this rejection used to
+      // escape armCard — skipping the disarm rollback below and leaving a switch
+      // marked active with last_checkin_at still NULL, which the hub's evaluator
+      // can never fire. The member sees "armed" and is protected by nothing.
+      let res;
+      try {
+        res = await fetch(CHECK_IN, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+      } catch (e) {
+        await hubAlert("Could not reach the hub to check in.", { description: e.message });
+        return false;
+      }
       if (res.status === 402) {
         entitled = false;
         renderBanner();
@@ -649,17 +665,41 @@
       return true;
     }
 
+    const setActive = (id, active) => db(
+      "UPDATE app_dead_mans_switch__switches SET active = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+      [active, new Date().toISOString(), id, ME.id],
+    );
+
     async function armCard(node) {
       const id = node.dataset.id;
       if (!(await saveCard(node, { silent: true }))) return;
-      await db("UPDATE app_dead_mans_switch__switches SET active = 1, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
-      await loadRows();
-      // The first check-in starts the server-side clock; a 402 here means the
-      // household lacks the Premium capabilities — disarm again so nobody
-      // believes an unmonitored switch is protecting them.
-      if (!(await checkIn({ render: false }))) {
-        await db("UPDATE app_dead_mans_switch__switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
+      try {
+        await setActive(id, 1);
         await loadRows();
+      } catch (e) {
+        // Nothing was armed, so there is nothing to roll back.
+        showCardError(node, e.message ?? "Could not arm this switch.");
+        return;
+      }
+      // The first check-in starts the server-side clock; a 402 here means the
+      // household lacks the Premium capabilities, and any other failure means
+      // the clock never started — disarm again either way, so nobody believes
+      // an unmonitored switch is protecting them.
+      let started = false;
+      try {
+        started = await checkIn({ render: false });
+      } catch { started = false; }
+      if (!started) {
+        try {
+          await setActive(id, 0);
+          await loadRows();
+        } catch (e) {
+          // The one state that must never pass silently: active with no
+          // check-in stamp is a switch that can never fire.
+          await hubAlert("This switch is armed but its clock never started.", {
+            description: `${e.message ?? "The hub could not be reached."} Turn it off and on again once you are back online.`,
+          });
+        }
       }
       // Rebuild just this card (its buttons + fields now reflect the armed,
       // saved state); refresh the other cards' live status only.
@@ -669,8 +709,13 @@
 
     async function disarmCard(node) {
       const id = node.dataset.id;
-      await db("UPDATE app_dead_mans_switch__switches SET active = 0, updated_at = ? WHERE id = ? AND member_id = ?", [new Date().toISOString(), id, ME.id]);
-      await loadRows();
+      try {
+        await setActive(id, 0);
+        await loadRows();
+      } catch (e) {
+        showCardError(node, e.message ?? "Could not turn this switch off.");
+        return;
+      }
       syncCard(id);
       refreshStatuses();
     }

@@ -32,6 +32,12 @@
       "adults_bypass": false
     }
   },
+  "member_references": {
+    "switches": [
+      { "column": "member_id", "on_removed": "delete", "file_id_list_column": "attachment_file_ids" },
+      { "column": "recipient_member_ids", "on_removed": "prune_list" }
+    ]
+  },
   "icon": "🛟",
   "nav": {
     "label": "Check-In Switch"

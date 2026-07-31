@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   HOURS_PER_WEEK, MIN_WEEKS, MAX_WEEKS, MAX_EXTERNAL_RECIPIENTS,
   weeksToHours, hoursToWeeks, intervalLabel,
-  switchStatus, formatRemaining, validateConfig, recipientsSummary, switchTitle,
+  switchStatus, formatRemaining, validateConfig, recipientsSummary, recipientsUnresolved, switchTitle,
   isValidEmail, normalizeEmail,
 } from "../src/logic.js";
 
@@ -128,6 +128,43 @@ describe("recipientsSummary", () => {
   it("appends a count of external contacts", () => {
     expect(recipientsSummary(["a2"], members, "me", ["x@y.com"])).toBe("Jordan + 1 external contact");
     expect(recipientsSummary([], members, "me", ["x@y.com", "z@w.com"])).toBe("Jordan (all adults) + 2 external contacts");
+  });
+
+  it("warns instead of showing the all-adults default when every named recipient has left", () => {
+    // The old text was "Jordan (all adults)" — a person this member never chose,
+    // presented as if they had, while the departure stayed invisible.
+    const out = recipientsSummary(["gone-1"], members, "me");
+    expect(out).toContain("no longer in this household");
+    expect(out).not.toContain("(all adults)");
+    expect(out).toContain("Jordan"); // says where the alert actually goes
+  });
+
+  it("keeps a switch alive when only SOME named recipients have left", () => {
+    expect(recipientsSummary(["a2", "gone-1"], members, "me")).toBe("Jordan");
+  });
+
+  it("points at the external contacts when they are all that remains", () => {
+    const out = recipientsSummary(["gone-1"], members, "me", ["x@y.com"]);
+    expect(out).toContain("1 external contact only");
+  });
+
+  it("says plainly that nothing will send when there is no fallback at all", () => {
+    const soloHousehold = [{ id: "me", name: "Me", role: "adult" }];
+    expect(recipientsSummary(["gone-1"], soloHousehold, "me")).toContain("alerts will not send");
+  });
+});
+
+describe("recipientsUnresolved", () => {
+  const members = [{ id: "me", name: "Me", role: "adult" }, { id: "a2", name: "Jordan", role: "adult" }];
+  it("is false when nobody was named — that is the all-adults setting, not a fault", () => {
+    expect(recipientsUnresolved([], members)).toBe(false);
+    expect(recipientsUnresolved(undefined, members)).toBe(false);
+  });
+  it("is false while at least one named recipient remains", () => {
+    expect(recipientsUnresolved(["a2", "gone"], members)).toBe(false);
+  });
+  it("is true once every named recipient has left", () => {
+    expect(recipientsUnresolved(["gone-1", "gone-2"], members)).toBe(true);
   });
 });
 

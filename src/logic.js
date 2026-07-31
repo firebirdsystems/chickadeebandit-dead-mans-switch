@@ -96,8 +96,28 @@ export function validateConfig({ label, intervalWeeks, message, recipientIds, re
 }
 
 /**
+ * True when this switch names household recipients and NONE of them are still
+ * on the roster — every one has left or been removed. This is the state the
+ * card has to shout about: the member deliberately chose who to notify, and
+ * that choice is now gone.
+ */
+export function recipientsUnresolved(recipientIds, members) {
+  const ids = (recipientIds ?? []).filter(Boolean);
+  if (ids.length === 0) return false;
+  const known = new Set((members ?? []).map(m => m.id));
+  return !ids.some(id => known.has(id));
+}
+
+/**
  * Recipients label for the status card: household names (or the all-adults
  * default) plus a count of external contacts.
+ *
+ * The "(all adults)" wording is reserved for a switch that never named anyone —
+ * where falling back to every adult is the setting the member chose. A switch
+ * whose named recipients have ALL left the household previously rendered the
+ * same text, so the card cheerfully reported "Alerts go to: Jordan (all adults)"
+ * about a person the member had never picked, while hiding that the person they
+ * did pick was gone. It now says so, and says where the alert will actually go.
  */
 export function recipientsSummary(recipientIds, members, selfId, recipientEmails) {
   const byId = new Map((members ?? []).map(m => [m.id, m]));
@@ -106,11 +126,24 @@ export function recipientsSummary(recipientIds, members, selfId, recipientEmails
   const externalLabel = emails.length > 0
     ? `${emails.length} external contact${emails.length === 1 ? "" : "s"}`
     : "";
+  const adults = (members ?? []).filter(m => m.role === "adult" && m.id !== selfId).map(m => m.name);
+
+  if (recipientsUnresolved(recipientIds, members)) {
+    // The hub falls back to household adults here rather than sending nothing
+    // (inactivity_alerts on_no_recipients: "adults"), so say that — but never
+    // dressed up as the member's own choice.
+    const fallback = emails.length > 0
+      ? `${externalLabel} only`
+      : adults.length > 0
+        ? `every adult instead — ${adults.join(", ")}`
+        : "nobody — alerts will not send";
+    return `⚠️ the people you chose are no longer in this household, so alerts go to ${fallback}`;
+  }
+
   let base;
   if (named.length > 0) {
     base = named.join(", ");
   } else {
-    const adults = (members ?? []).filter(m => m.role === "adult" && m.id !== selfId).map(m => m.name);
     base = adults.length > 0 ? `${adults.join(", ")} (all adults)` : (externalLabel ? "" : "No eligible recipients yet");
   }
   return [base, externalLabel].filter(Boolean).join(" + ");
