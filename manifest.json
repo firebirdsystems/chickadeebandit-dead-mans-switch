@@ -42,6 +42,18 @@
   "nav": {
     "label": "Check-In Switch"
   },
+  "glance": {
+    "source": {
+      "kind": "sql",
+      "query": "SELECT COUNT(*) AS n FROM app_dead_mans_switch__switches WHERE active = 1 AND (last_checkin_at IS NULL OR datetime(last_checkin_at, '+' || (interval_hours - 24) || ' hours') <= datetime('now')) LIMIT 1"
+    },
+    "display": {
+      "template": "badge",
+      "count": "n",
+      "label": "check-in due",
+      "severity": "warn"
+    }
+  },
   "required_capabilities": [
     "cron",
     "email"
