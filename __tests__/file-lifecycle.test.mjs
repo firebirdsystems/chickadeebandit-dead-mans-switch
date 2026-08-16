@@ -10,10 +10,14 @@
  *  - DELETE a switch      → the hub, via manifest.delete_file_list_columns
  *                           (decoded through the household codec, queued inside
  *                           the DELETE's own transaction).
- *  - UPLOAD an attachment → the client, on both paths where the UPDATE that
- *                           would reference the bytes fails to land.
- *  - REMOVE an attachment → the client, after re-deriving references from
- *                           freshly loaded rows.
+ *  - REMOVE an attachment → the hub, via manifest.update_file_list_columns
+ *                           (reads the pre-image, queues what the new value
+ *                           drops; the outbox re-checks references against the
+ *                           committed database before touching R2).
+ *  - UPLOAD an attachment → the client, and ONLY here: on both paths where the
+ *                           UPDATE that would reference the bytes fails to
+ *                           land, no row ever took a reference, so there is
+ *                           nothing for the hub's lanes to key off.
  */
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -77,19 +81,30 @@ describe("attachment upload", () => {
 });
 
 describe("attachment removal", () => {
-  const body = fn("removeAttachment", "// Delete stored files that no switch");
+  const body = fn("removeAttachment", "// The client no longer reclaims");
 
-  it("re-derives references from freshly loaded rows before deleting", () => {
-    // Ordering matters: unlink, reload, then reclaim. If the UPDATE did not
-    // land, the reloaded row still names the file and the reclaim skips it.
-    const update = body.indexOf("UPDATE app_dead_mans_switch__switches");
-    const reload = body.indexOf("loadRows()");
-    const reclaim = body.indexOf("deleteUnreferencedFiles");
-    expect(update).toBeLessThan(reload);
-    expect(reload).toBeLessThan(reclaim);
+  it("declares the update lane so the hub reclaims the detached file", () => {
+    expect(manifest.update_file_list_columns?.switches).toContain("attachment_file_ids");
   });
 
-  it("keeps the reference check rather than deleting the id outright", () => {
-    expect(body).toContain("deleteUnreferencedFiles([fileId])");
+  it("does not reclaim from the client", () => {
+    // Matched as a CALL, not a mention: the comment explaining the removal
+    // names the function it replaced.
+    expect(body).not.toMatch(/^[^/\n]*\bdeleteUnreferencedFiles\s*\(/m);
+  });
+
+  it("detaches as a single statement, which the declaration requires", () => {
+    // A declared table's UPDATE cannot go through the /api/db batch form.
+    expect(body).toContain('await db(\n        "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?');
+  });
+});
+
+describe("client-side reclaim", () => {
+  it("keeps exactly one — undoing an upload no row ever referenced", () => {
+    // Every other lane is the hub's now. A new client-side delete here would
+    // be a lane quietly taken back from the outbox.
+    const calls = client.match(/method: "DELETE" \}/g) ?? [];
+    expect(calls).toHaveLength(2); // both inside uploadAttachment
+    expect(client).not.toMatch(/^[^/\n]*\bdeleteUnreferencedFiles\s*\(/m);
   });
 });

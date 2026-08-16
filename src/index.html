@@ -786,25 +786,31 @@
       const row = rows.find(r => r.id === id);
       if (!row) return;
       const ids = parseAttachmentIds(row.attachment_file_ids).filter(f => f !== fileId);
+      // The unlinked file goes with the write: `manifest.update_file_list_columns`
+      // has the hub read the pre-image of attachment_file_ids, queue whatever
+      // the new value drops, and let the deletion outbox re-derive "still
+      // referenced?" from the committed database before touching R2 — so a file
+      // another switch also names is never destroyed here.
+      //
+      // The `deleteUnreferencedFiles([fileId])` this replaces ran after the
+      // write and after a loadRows() round trip; it was correct when it ran,
+      // but it was best-effort and unretried, so a closed tab in between left
+      // bytes nothing could name.
       await db(
         "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
         [JSON.stringify(ids), new Date().toISOString(), id, ME.id],
       );
       await loadRows();
-      await deleteUnreferencedFiles([fileId]);
       const fresh = rows.find(r => r.id === id);
       if (fresh) renderAttachments(node, fresh);
     }
 
-    // Delete stored files that no switch of mine references any more (frees
-    // household storage; rows only ever hold the caller's switches).
-    async function deleteUnreferencedFiles(fileIds) {
-      if (!FILES) return;
-      const referenced = new Set(rows.flatMap(r => parseAttachmentIds(r.attachment_file_ids)));
-      await Promise.all(fileIds
-        .filter(fid => !referenced.has(fid))
-        .map(fid => fetch(`${FILES}/${fid}`, { method: "DELETE" }).catch(() => {})));
-    }
+    // The client no longer reclaims attachments at all: the hub owns every lane
+    // that can strand them — delete_file_list_columns when a switch is deleted,
+    // update_file_list_columns when one is detached — and the deletion outbox
+    // re-checks references against the committed database before touching R2.
+    // The one remaining client-side delete is in uploadAttachment, undoing an
+    // upload no row ever took a reference to.
 
     // Add an external email chip to a card's selection (no server call yet).
     function addExternalChip(node, email, name) {
