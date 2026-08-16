@@ -1,8 +1,11 @@
 {
   "id": "dead-mans-switch",
-  "contexts": ["household", "shared_space"],
+  "contexts": [
+    "household",
+    "shared_space"
+  ],
   "name": "Check-In Switch",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A dead-man's switch for peace of mind: check in on your schedule, and if you go silent past your chosen interval, the people you designate get an alert with your message and a link to any files you left for them.",
   "entrypoint": "index.html",
   "runtime": "static",
@@ -24,7 +27,10 @@
     "requires_approval": false
   },
   "storage": "db",
-  "db_plaintext_columns": ["last_checkin_at", "last_alerted_at"],
+  "db_plaintext_columns": [
+    "last_checkin_at",
+    "last_alerted_at"
+  ],
   "row_policies": {
     "switches": {
       "kind": "owner_only",
@@ -32,13 +38,25 @@
       "adults_bypass": false
     }
   },
-  "member_references": {
+  "delete_file_list_columns": {
     "switches": [
-      { "column": "member_id", "on_removed": "delete", "file_id_list_column": "attachment_file_ids" },
-      { "column": "recipient_member_ids", "on_removed": "prune_list" }
+      "attachment_file_ids"
     ]
   },
-  "icon": "🛟",
+  "member_references": {
+    "switches": [
+      {
+        "column": "member_id",
+        "on_removed": "delete",
+        "file_id_list_column": "attachment_file_ids"
+      },
+      {
+        "column": "recipient_member_ids",
+        "on_removed": "prune_list"
+      }
+    ]
+  },
+  "icon": "\ud83d\udedf",
   "nav": {
     "label": "Check-In Switch"
   },

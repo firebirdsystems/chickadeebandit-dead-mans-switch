@@ -619,10 +619,16 @@
       const row = rows.find(r => r.id === id);
       const name = switchTitle(row, members, ME?.id);
       if (!(await hubConfirm(`Delete the switch “${name}”? This can't be undone.`))) return;
-      const attachedIds = parseAttachmentIds(row?.attachment_file_ids);
+      // The attachments go with the row: `manifest.delete_file_list_columns`
+      // has the hub decode `attachment_file_ids` off the doomed row — through
+      // the household codec, since the column is encrypted at rest — and queue
+      // the R2 reclaim inside this DELETE's own transaction. The
+      // `deleteUnreferencedFiles(...)` call this replaces ran after the row was
+      // already gone AND after a `loadRows()` round trip, so an interruption
+      // anywhere in between left every attachment with nothing to name it by.
+      // Worst case here, a switch may hold several multi-MB files.
       await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
       await loadRows();
-      await deleteUnreferencedFiles(attachedIds);
       // Drop just this card; rebuild only to show the empty state once none remain.
       if (rows.length === 0) renderSwitches(); else node.remove();
       renderOverall();
@@ -743,10 +749,31 @@
         return;
       }
       const { id: fileId } = await res.json();
-      await db(
-        "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
-        [JSON.stringify([...ids, fileId]), new Date().toISOString(), id, ME.id],
-      );
+      // The bytes are live in R2 the moment the POST returns, but nothing
+      // references them until the UPDATE below lands. Both ways it can fail to
+      // land leave a file no row names: the hub's reconciler only reaps objects
+      // with NO metadata row, so an abandoned upload is invisible to every view
+      // and still billed against the household's cap. Undo it on both paths.
+      //
+      // `changed` is the affected-row count: the predicate carries
+      // `member_id = ?` and the switch may have been deleted from another
+      // device mid-upload, so a clean response can still mean nothing matched.
+      let changed;
+      try {
+        ({ changed } = await db(
+          "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+          [JSON.stringify([...ids, fileId]), new Date().toISOString(), id, ME.id],
+        ));
+      } catch (e) {
+        await fetch(`${FILES}/${fileId}`, { method: "DELETE" }).catch(() => {});
+        showCardError(node, e.message ?? "Attaching the file failed — please try again.");
+        return;
+      }
+      if (!changed) {
+        await fetch(`${FILES}/${fileId}`, { method: "DELETE" }).catch(() => {});
+        showCardError(node, "This switch was removed while the file was uploading.");
+        return;
+      }
       await Promise.all([loadRows(), loadFilesMeta()]);
       const fresh = rows.find(r => r.id === id);
       // Refresh only the attachment list; the rest of the card keeps its DOM
