@@ -343,9 +343,8 @@
       const buy = el("buy-banner");
       if (entitled === false) {
         buy.innerHTML = "🔒 <strong>Monitoring is not active for your household yet.</strong> " +
-          "The app is free to set up, but the hub-side monitoring and alert emails are part of the " +
-          "<strong>Premium</strong> capability bundle. A household admin can upgrade from " +
-          "<strong>Apps → Marketplace</strong> (look for the Premium prompt on this app).";
+          "Monitoring and alert emails are included with every plan, but they pause while the household's " +
+          "subscription is inactive. A household admin can renew from <strong>Settings → Billing</strong>.";
         buy.hidden = false;
       } else {
         buy.hidden = true;
@@ -688,7 +687,7 @@
         return;
       }
       // The first check-in starts the server-side clock; a 402 here means the
-      // household lacks the Premium capabilities, and any other failure means
+      // household's plan is inactive, and any other failure means
       // the clock never started — disarm again either way, so nobody believes
       // an unmonitored switch is protecting them.
       let started = false;
@@ -840,7 +839,7 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: norm, name: name || undefined }),
         });
-        if (res.status === 402) { entitled = false; renderBanner(); showCardError(node, "Adding external contacts needs the Premium capability bundle."); return; }
+        if (res.status === 402) { entitled = false; renderBanner(); showCardError(node, "Adding external contacts needs an active plan."); return; }
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           showCardError(node, data.error ?? "Couldn't send the confirmation email.");
