@@ -49,6 +49,65 @@
           "expect": { "status": 200, "rowCount": 1 }
         }
       ]
+    },
+    {
+      "name": "a child's switch is private even from a parent, and a child cannot see or disarm a parent's switch",
+      "members": { "kid": "child", "parent": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, created_at, updated_at) VALUES ('sw-parent', ?, 'Family', 1, 168, 'the vault code is 4711', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{parent}}"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, created_at, updated_at) VALUES ('sw-kid', ?, 'Friends', 1, 168, 'my diary is under the bed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{kid}}"]
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT id FROM app_dead_mans_switch__switches",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "sw-kid" }] }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT id FROM app_dead_mans_switch__switches",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "sw-parent" }] }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "UPDATE app_dead_mans_switch__switches SET active = 0 WHERE id = 'sw-parent'",
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "parent",
+          "sql": "SELECT active FROM app_dead_mans_switch__switches WHERE id = 'sw-parent'",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "active": 1 }] }
+        }
+      ]
+    },
+    {
+      "name": "a child can create a switch, and it is stamped as their own",
+      "members": { "kid": "child", "parent": "adult" },
+      "steps": [
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, created_at, updated_at) VALUES ('sw-kid', ?, 'Friends', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["{{parent}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "kid",
+          "sql": "SELECT member_id FROM app_dead_mans_switch__switches WHERE id = 'sw-kid'",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "member_id": "scn-kid" }] }
+        }
+      ]
     }
   ]
 }

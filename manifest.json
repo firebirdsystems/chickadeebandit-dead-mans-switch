@@ -27,6 +27,9 @@
     "requires_approval": false
   },
   "storage": "db",
+  "preload": {
+    "switches": {"sql": "SELECT * FROM app_dead_mans_switch__switches WHERE member_id = ? ORDER BY created_at", "params": [":me"]}
+  },
   "db_plaintext_columns": [
     "last_checkin_at",
     "last_alerted_at"
