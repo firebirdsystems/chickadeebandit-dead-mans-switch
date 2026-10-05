@@ -141,10 +141,10 @@
       <div class="status-row">
         <div id="overall-dot" class="status-dot disarmed"></div>
         <div class="status-text">
-          <div id="overall-headline" class="headline">Loading…</div>
+          <div id="overall-headline" class="headline" data-testid="overall-headline">Loading…</div>
           <div id="overall-detail" class="detail"></div>
         </div>
-        <button id="checkin-btn" class="btn-checkin" hidden>Check in now</button>
+        <button id="checkin-btn" class="btn-checkin" data-testid="checkin-btn" hidden>Check in now</button>
       </div>
       <p class="hint">One check-in resets the clock on all of your switches at once.</p>
     </div>
@@ -160,10 +160,10 @@
   </div>
 
   <template id="switch-tpl">
-    <div class="card switch-card" data-id="">
+    <div class="card switch-card" data-testid="switch-card" data-id="">
       <div class="switch-head">
         <div class="status-dot disarmed" data-el="dot"></div>
-        <div class="title" data-el="title"></div>
+        <div class="title" data-el="title" data-testid="switch-title"></div>
       </div>
       <div class="status-text">
         <div class="headline" data-el="headline"></div>
@@ -220,6 +220,7 @@
     import {
       hoursToWeeks, weeksToHours, intervalLabel, switchStatus, formatRemaining,
       validateConfig, recipientsSummary, switchTitle, normalizeEmail, isValidEmail,
+      canManageExternalContacts,
       parseAttachmentIds, formatFileSize,
       MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS, MAX_ATTACHMENTS,
     } from "./logic.js";
@@ -284,7 +285,7 @@
     // The household-wide double-opt-in registry: normalized email → status.
     async function loadExternalContacts() {
       externalContacts = new Map();
-      if (!XC_LIST) return;
+      if (!XC_LIST || !canManageExternalContacts(ME, window.__IS_ADMIN === true)) return;
       try {
         const res = await fetch(XC_LIST, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
@@ -407,6 +408,7 @@
     function renderSwitchCard(row) {
       const node = el("switch-tpl").content.firstElementChild.cloneNode(true);
       node.dataset.id = row.id;
+      node.dataset.switchId = row.id;
       const q = (name) => node.querySelector(`[data-el="${name}"]`);
 
       q("title").textContent = switchTitle(row, members, ME?.id);

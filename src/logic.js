@@ -178,3 +178,18 @@ export function switchTitle(row, members, selfId) {
   );
   return `${intervalLabel(row?.interval_hours)} → ${recipients}`;
 }
+
+/**
+ * Whether `me` may read or change the household's external-contact registry.
+ *
+ * MUST mirror the hub's gate on `api/external-contacts/*`: an admin, or a
+ * member whose role is adult. A child or guest is refused with a 403, so the
+ * app must not ask on their behalf — the request can only fail, and it lands
+ * in the console as an error on every open.
+ *
+ * @param {object|null} me       `window.__CURRENT_MEMBER`
+ * @param {boolean} [isAdmin]    `window.__IS_ADMIN`
+ */
+export function canManageExternalContacts(me, isAdmin = false) {
+  return !!me && (isAdmin === true || me.role === "adult");
+}

@@ -1,0 +1,206 @@
+{
+  "scenarios": [
+    {
+      "name": "each adult's browser renders only their own switches, and one member's armed switch never arms another's summary or shows them a check-in button",
+      "members": {
+        "owner": "admin",
+        "other": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES ('ui-own', ?, ?, 1, 168, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": [
+            "{{owner}}",
+            "Close family",
+            "the vault code is 4711",
+            "[]",
+            "[]"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES ('ui-other', ?, ?, 0, 168, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": [
+            "{{other}}",
+            "Work friends",
+            "call my manager",
+            "[]",
+            "[]"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "other"
+        },
+        {
+          "action": "expectVisible",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-other\"]",
+          "as": "other"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-own\"]",
+          "count": 0,
+          "as": "other"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"]",
+          "count": 1,
+          "as": "other"
+        },
+        {
+          "action": "expectNoText",
+          "text": "Close family",
+          "as": "other"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"overall-headline\"]",
+          "text": "All switches disarmed",
+          "as": "other"
+        },
+        {
+          "action": "expectHidden",
+          "selector": "[data-testid=\"checkin-btn\"]",
+          "as": "other"
+        },
+        {
+          "action": "open",
+          "as": "owner"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-own\"] [data-testid=\"switch-title\"]",
+          "text": "Close family",
+          "as": "owner"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-other\"]",
+          "count": 0,
+          "as": "owner"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"]",
+          "count": 1,
+          "as": "owner"
+        },
+        {
+          "action": "expectNoText",
+          "text": "Work friends",
+          "as": "owner"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"overall-headline\"]",
+          "text": "waiting for your first check-in",
+          "as": "owner"
+        },
+        {
+          "action": "expectVisible",
+          "selector": "[data-testid=\"checkin-btn\"]",
+          "as": "owner"
+        }
+      ]
+    },
+    {
+      "name": "a child's switch is private from a parent and a parent's from the child, and opening the app as a child raises no refused request",
+      "members": {
+        "parent": "adult",
+        "kid": "child"
+      },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES ('ui-parent', ?, ?, 1, 168, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": [
+            "{{parent}}",
+            "Close family",
+            "the vault code is 4711",
+            "[]",
+            "[]"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES ('ui-kid', ?, ?, 0, 168, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": [
+            "{{kid}}",
+            "Best friends",
+            "my diary is under the bed",
+            "[]",
+            "[]"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "kid"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-kid\"] [data-testid=\"switch-title\"]",
+          "text": "Best friends",
+          "as": "kid"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-parent\"]",
+          "count": 0,
+          "as": "kid"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"]",
+          "count": 1,
+          "as": "kid"
+        },
+        {
+          "action": "expectNoText",
+          "text": "Close family",
+          "as": "kid"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"overall-headline\"]",
+          "text": "All switches disarmed",
+          "as": "kid"
+        },
+        {
+          "action": "expectHidden",
+          "selector": "[data-testid=\"checkin-btn\"]",
+          "as": "kid"
+        },
+        {
+          "action": "open",
+          "as": "parent"
+        },
+        {
+          "action": "expectText",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-parent\"] [data-testid=\"switch-title\"]",
+          "text": "Close family",
+          "as": "parent"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"][data-switch-id=\"ui-kid\"]",
+          "count": 0,
+          "as": "parent"
+        },
+        {
+          "action": "expectCount",
+          "selector": "[data-testid=\"switch-card\"]",
+          "count": 1,
+          "as": "parent"
+        },
+        {
+          "action": "expectNoText",
+          "text": "Best friends",
+          "as": "parent"
+        }
+      ]
+    }
+  ]
+}

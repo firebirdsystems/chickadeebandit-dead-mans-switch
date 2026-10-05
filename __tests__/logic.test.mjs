@@ -209,3 +209,19 @@ describe("attachments", () => {
     expect(MAX_ATTACHMENTS).toBeGreaterThan(0);
   });
 });
+
+describe("canManageExternalContacts", () => {
+  it("mirrors the hub gate: an admin or an adult", async () => {
+    const { canManageExternalContacts } = await import("../src/logic.js");
+    expect(canManageExternalContacts({ id: "m1", role: "adult" })).toBe(true);
+    expect(canManageExternalContacts({ id: "m1", role: "child" }, true)).toBe(true);
+  });
+
+  it("is false for a child, a guest and a signed-out viewer", async () => {
+    const { canManageExternalContacts } = await import("../src/logic.js");
+    expect(canManageExternalContacts({ id: "m1", role: "child" })).toBe(false);
+    expect(canManageExternalContacts({ id: "m1", role: "guest" })).toBe(false);
+    expect(canManageExternalContacts({ id: "m1", role: "child" }, "true")).toBe(false);
+    expect(canManageExternalContacts(null, true)).toBe(false);
+  });
+});
