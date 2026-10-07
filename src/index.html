@@ -130,7 +130,7 @@
 </head>
 <body>
   <div class="app-header">
-    <h1>🛟 Check-In Switch</h1>
+    <h1><span id="page-glyph"></span> Check-In Switch</h1>
     <p class="subtitle">If you go quiet past your chosen interval, the people you pick get your message.</p>
   </div>
 
@@ -186,7 +186,7 @@
       <div class="attachments" data-el="attachments"></div>
       <div class="add-attachment">
         <input type="file" data-el="file-input" hidden />
-        <button class="btn-ghost" data-action="add-file" type="button">📎 Attach a file</button>
+        <button class="btn-ghost" data-action="add-file" type="button">Attach a file</button>
       </div>
       <p class="hint">If this switch triggers, the alert email includes a private link where your contacts can read your message and download these files — no account needed. Checking in again disables the link.</p>
 
@@ -216,7 +216,7 @@
   </template>
 
   <script type="module">
-    import { esc, hubAlert, hubConfirm } from "/hub-sdk.js";
+    import { esc, hubAlert, hubConfirm, glyph } from "/hub-sdk.js";
     import {
       hoursToWeeks, weeksToHours, intervalLabel, switchStatus, formatRemaining,
       validateConfig, recipientsSummary, switchTitle, normalizeEmail, isValidEmail,
@@ -224,6 +224,9 @@
       parseAttachmentIds, formatFileSize,
       MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS, MAX_ATTACHMENTS,
     } from "./logic.js";
+
+    // The page heading is static markup; its mark comes from the SDK.
+    document.getElementById("page-glyph").innerHTML = glyph("switch");
 
     const DB = window.__DB_URL ?? "";
     const FILES = window.__FILES_URL ?? "";
@@ -343,7 +346,7 @@
     function renderBanner() {
       const buy = el("buy-banner");
       if (entitled === false) {
-        buy.innerHTML = "🔒 <strong>Monitoring is not active for your household yet.</strong> " +
+        buy.innerHTML = glyph("lock") + " <strong>Monitoring is not active for your household yet.</strong> " +
           "Monitoring and alert emails are included with every plan, but they pause while the household's " +
           "subscription is inactive. A household admin can renew from <strong>Settings → Billing</strong>.";
         buy.hidden = false;
@@ -409,6 +412,8 @@
       const node = el("switch-tpl").content.firstElementChild.cloneNode(true);
       node.dataset.id = row.id;
       node.dataset.switchId = row.id;
+      // The template is static markup, so the attach button's mark is filled per card.
+      node.querySelector('[data-action="add-file"]').innerHTML = `${glyph("paperclip")} Attach a file`;
       const q = (name) => node.querySelector(`[data-el="${name}"]`);
 
       q("title").textContent = switchTitle(row, members, ME?.id);
@@ -476,7 +481,7 @@
       list.innerHTML = ids.map(id => {
         const meta = filesMeta.get(id);
         return `<div class="attachment" data-file-id="${esc(id)}">
-            <span class="file-name">📄 ${esc(meta?.name ?? "File")}</span>
+            <span class="file-name">${glyph("document")} ${esc(meta?.name ?? "File")}</span>
             <span class="file-size">${meta ? esc(formatFileSize(meta.size)) : ""}</span>
             <button type="button" class="x" data-action="remove-attachment" title="Remove">×</button>
           </div>`;
