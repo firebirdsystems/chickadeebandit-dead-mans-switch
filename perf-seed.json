@@ -1,0 +1,290 @@
+{
+ "seed": [
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:00:00Z','now','+0 days'), strftime('%Y-%m-%dT09:10:00Z','now','-200 days'), strftime('%Y-%m-%dT12:00:00Z','now','-1 days'))",
+   "params": [
+    "perf-sw-01",
+    "{{me}}",
+    "Close family",
+    1,
+    168,
+    "If you are reading this I have not checked in for a week. The spare keys are with the Hendersons next door and the vault code is in the blue notebook.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:01:00Z','now','+0 days'), strftime('%Y-%m-%dT09:11:00Z','now','-193 days'), strftime('%Y-%m-%dT12:00:00Z','now','-2 days'))",
+   "params": [
+    "perf-sw-02",
+    "{{me}}",
+    "Estate and accounts",
+    1,
+    720,
+    "Our attorney is Dana Whitfield at Whitfield & Rowe. The will and the trust documents are in the fire safe; the binder labelled HOUSE has every account and policy number.",
+    "[]",
+    "[\"dana@whitfieldrowe.example\",\"accountant@ledgerline.example\"]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:12:00Z','now','-186 days'), strftime('%Y-%m-%dT12:00:00Z','now','-3 days'))",
+   "params": [
+    "perf-sw-03",
+    "{{me}}",
+    "Solo hiking trips",
+    0,
+    168,
+    "I left on a solo trip and have not checked back in. My route and trailhead are on the fridge calendar. Call the ranger district before anything else.",
+    "[]",
+    "[\"trailbuddy@example.com\"]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:03:00Z','now','+0 days'), strftime('%Y-%m-%dT09:13:00Z','now','-179 days'), strftime('%Y-%m-%dT12:00:00Z','now','-4 days'))",
+   "params": [
+    "perf-sw-04",
+    "{{me}}",
+    "Pet care",
+    1,
+    336,
+    "Please look after Biscuit and Olive. Vet is Northside Animal Clinic, food instructions are taped inside the pantry door.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:04:00Z','now','+0 days'), strftime('%Y-%m-%dT09:14:00Z','now','-172 days'), strftime('%Y-%m-%dT12:00:00Z','now','-5 days'))",
+   "params": [
+    "perf-sw-05",
+    "{{me}}",
+    "Work handover",
+    1,
+    336,
+    "Project notes and credentials for the client portals are in the shared drive under Handover. Priya on my team knows the open items.",
+    "[]",
+    "[\"priya@workplace.example\"]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:05:00Z','now','+0 days'), strftime('%Y-%m-%dT09:15:00Z','now','-165 days'), strftime('%Y-%m-%dT12:00:00Z','now','-6 days'))",
+   "params": [
+    "perf-sw-06",
+    "{{me}}",
+    "Online accounts",
+    1,
+    2160,
+    "The password manager emergency kit is printed and sealed in the fire safe. Please close the social accounts and keep the photo library.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:16:00Z','now','-158 days'), strftime('%Y-%m-%dT12:00:00Z','now','-7 days'))",
+   "params": [
+    "perf-sw-07",
+    "{{me}}",
+    "Letters for the kids",
+    0,
+    8760,
+    "There is a letter for each of you in the cedar box in our closet. Open them together.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:07:00Z','now','+0 days'), strftime('%Y-%m-%dT09:17:00Z','now','-151 days'), strftime('%Y-%m-%dT12:00:00Z','now','-8 days'))",
+   "params": [
+    "perf-sw-08",
+    "{{me}}",
+    "Elderly parent check",
+    1,
+    168,
+    "If I go quiet, someone needs to call Mum daily and take over her Thursday pharmacy run. Her neighbour Ruth has a key.",
+    "[]",
+    "[\"ruth.neighbour@example.com\",\"cousin.sam@example.com\"]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:18:00Z','now','-144 days'), strftime('%Y-%m-%dT12:00:00Z','now','-9 days'))",
+   "params": [
+    "perf-sw-09",
+    "{{me}}",
+    "Travel abroad",
+    0,
+    168,
+    "Itinerary, passport copies and the insurance policy are in the Travel folder. Embassy contact numbers are on the first page.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:09:00Z','now','+0 days'), strftime('%Y-%m-%dT09:19:00Z','now','-137 days'), strftime('%Y-%m-%dT12:00:00Z','now','-1 days'))",
+   "params": [
+    "perf-sw-10",
+    "{{me}}",
+    "Small business",
+    1,
+    720,
+    "Payroll runs on the 1st and 15th. The bookkeeper can sign for the operating account; the lease renewal is due in March.",
+    "[]",
+    "[\"bookkeeper@ledgerline.example\"]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:00:00Z','now','+0 days'), strftime('%Y-%m-%dT09:20:00Z','now','-130 days'), strftime('%Y-%m-%dT12:00:00Z','now','-2 days'))",
+   "params": [
+    "perf-sw-11",
+    "{{partner}}",
+    "Close family",
+    1,
+    168,
+    "Everything important is in the grey filing cabinet, top drawer.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:01:00Z','now','+0 days'), strftime('%Y-%m-%dT09:21:00Z','now','-123 days'), strftime('%Y-%m-%dT12:00:00Z','now','-3 days'))",
+   "params": [
+    "perf-sw-12",
+    "{{partner}}",
+    "Estate and accounts",
+    1,
+    720,
+    "Call Dana Whitfield. The life policy is with Northern Mutual.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:22:00Z','now','-116 days'), strftime('%Y-%m-%dT12:00:00Z','now','-4 days'))",
+   "params": [
+    "perf-sw-13",
+    "{{partner}}",
+    "Long-haul work trips",
+    0,
+    168,
+    "Flight details are in my calendar. HR emergency line is on my badge.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:03:00Z','now','+0 days'), strftime('%Y-%m-%dT09:23:00Z','now','-109 days'), strftime('%Y-%m-%dT12:00:00Z','now','-5 days'))",
+   "params": [
+    "perf-sw-14",
+    "{{partner}}",
+    "Garden and allotment",
+    1,
+    672,
+    "Someone please water the greenhouse and tell the allotment committee.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:04:00Z','now','+0 days'), strftime('%Y-%m-%dT09:24:00Z','now','-102 days'), strftime('%Y-%m-%dT12:00:00Z','now','-6 days'))",
+   "params": [
+    "perf-sw-15",
+    "{{partner}}",
+    "Online accounts",
+    1,
+    2160,
+    "Recovery codes are in the envelope behind the router.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-55 days'), strftime('%Y-%m-%dT09:25:00Z','now','-95 days'), strftime('%Y-%m-%dT12:00:00Z','now','-7 days'))",
+   "params": [
+    "perf-sw-16",
+    "{{partner}}",
+    "Letters",
+    0,
+    8760,
+    "Letters are in the cedar box.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:06:00Z','now','+0 days'), strftime('%Y-%m-%dT09:26:00Z','now','-88 days'), strftime('%Y-%m-%dT12:00:00Z','now','-8 days'))",
+   "params": [
+    "perf-sw-17",
+    "{{adult2}}",
+    "Next of kin",
+    1,
+    168,
+    "Please contact my brother; his number is on the fridge.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT00:07:00Z','now','+0 days'), strftime('%Y-%m-%dT09:27:00Z','now','-81 days'), strftime('%Y-%m-%dT12:00:00Z','now','-9 days'))",
+   "params": [
+    "perf-sw-18",
+    "{{adult2}}",
+    "House and pets",
+    1,
+    336,
+    "The cat needs her medication twice a day. Spare key is under the third flowerpot.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:28:00Z','now','-74 days'), strftime('%Y-%m-%dT12:00:00Z','now','-1 days'))",
+   "params": [
+    "perf-sw-19",
+    "{{adult2}}",
+    "Accounts",
+    0,
+    720,
+    "My solicitor has everything.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-59 days'), strftime('%Y-%m-%dT09:29:00Z','now','-67 days'), strftime('%Y-%m-%dT12:00:00Z','now','-2 days'))",
+   "params": [
+    "perf-sw-20",
+    "{{adult2}}",
+    "Sailing season",
+    0,
+    168,
+    "Marina berth C14. Harbour master has my float plan.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT09:30:00Z','now','-60 days'), strftime('%Y-%m-%dT12:00:00Z','now','-3 days'))",
+   "params": [
+    "perf-sw-21",
+    "{{child}}",
+    "Walking home alone",
+    0,
+    168,
+    "I did not check in. Please call me.",
+    "[]",
+    "[]"
+   ]
+  },
+  {
+   "sql": "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, recipient_emails, last_checkin_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT12:00:00Z','now','-61 days'), strftime('%Y-%m-%dT09:31:00Z','now','-53 days'), strftime('%Y-%m-%dT12:00:00Z','now','-4 days'))",
+   "params": [
+    "perf-sw-22",
+    "{{child2}}",
+    "After-school check-in",
+    0,
+    168,
+    "I did not check in. Please call me.",
+    "[]",
+    "[]"
+   ]
+  }
+ ]
+}
