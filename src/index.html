@@ -595,6 +595,13 @@
       };
     }
 
+    // Only wording this app wrote for the reader is shown; the hub's own error
+    // text goes to the console and the reader gets the fixed line.
+    function failText(e, line) {
+      if (!e?.forUser) console.error(e);
+      return e?.forUser ? e.message : line;
+    }
+
     function showCardError(node, msg) {
       const errEl = node.querySelector('[data-el="error"]');
       if (msg) { errEl.textContent = msg; errEl.hidden = false; }
@@ -614,10 +621,10 @@
           [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
         );
         // No row matched: the switch was deleted somewhere else.
-        if (changed === 0) throw new Error("This switch no longer exists. Reopen the app to see your switches.");
+        if (changed === 0) throw Object.assign(new Error("This switch no longer exists. Reopen the app to see your switches."), { forUser: true });
         await loadRows();
       } catch (e) {
-        showCardError(node, e.message ?? "Could not save this switch.");
+        showCardError(node, failText(e, "Couldn’t save this switch — try again."));
         return false;
       }
       // Re-render only this card (reflects the saved label/status); other cards
@@ -638,7 +645,8 @@
         );
         await loadRows();
       } catch (e) {
-        await hubAlert("Could not add a switch.", { description: e.message });
+        console.error(e);
+        await hubAlert("Couldn’t add a switch — try again.");
         return;
       }
       // Append the new card without rebuilding existing ones (preserves their
@@ -665,7 +673,7 @@
         await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
         await loadRows();
       } catch (e) {
-        showCardError(node, e.message ?? "Could not delete this switch.");
+        showCardError(node, failText(e, "Couldn’t delete this switch — try again."));
         return;
       }
       // Drop just this card; rebuild only to show the empty state once none remain.
@@ -688,7 +696,8 @@
           body: "{}",
         });
       } catch (e) {
-        await hubAlert("Could not reach the hub to check in.", { description: e.message });
+        console.error(e);
+        await hubAlert("Couldn’t check in — try again.");
         return false;
       }
       if (res.status === 402) {
@@ -698,7 +707,8 @@
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        await hubAlert(data.error ?? "Check-in failed");
+        console.error("check-in failed", res.status, data?.error);
+        await hubAlert("Couldn’t check in — try again.");
         return false;
       }
       entitled = true;
@@ -723,7 +733,7 @@
         await loadRows();
       } catch (e) {
         // Nothing was armed, so there is nothing to roll back.
-        showCardError(node, e.message ?? "Could not arm this switch.");
+        showCardError(node, failText(e, "Couldn’t arm this switch — try again."));
         return;
       }
       // The first check-in starts the server-side clock; a 402 here means the
@@ -741,8 +751,9 @@
         } catch (e) {
           // The one state that must never pass silently: active with no
           // check-in stamp is a switch that can never fire.
+          console.error(e);
           await hubAlert("This switch is armed but its clock never started.", {
-            description: `${e.message ?? "The hub could not be reached."} Turn it off and on again once you are back online.`,
+            description: "Turn it off and on again once you are back online.",
           });
         }
       }
@@ -758,7 +769,7 @@
         await setActive(id, 0);
         await loadRows();
       } catch (e) {
-        showCardError(node, e.message ?? "Could not turn this switch off.");
+        showCardError(node, failText(e, "Couldn’t turn this switch off — try again."));
         return;
       }
       syncCard(id);
@@ -784,7 +795,11 @@
       const res = await fetch(FILES, { method: "POST", body: form });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showCardError(node, data.error ?? "Upload failed — please try again.");
+        // An upload the hub refused (too large, wrong type, storage full) is
+        // shown in the hub's words; any other failure gets this page's line.
+        const refused = res.status === 507 || (res.status >= 400 && res.status < 500);
+        if (!refused) console.error("upload failed", res.status, data?.error);
+        showCardError(node, (refused && data.error) || "Couldn’t upload the file — try again.");
         return;
       }
       const { id: fileId } = await res.json();
@@ -805,7 +820,7 @@
         ));
       } catch (e) {
         await fetch(`${FILES}/${fileId}`, { method: "DELETE" }).catch(() => {});
-        showCardError(node, e.message ?? "Attaching the file failed — please try again.");
+        showCardError(node, failText(e, "Couldn’t attach the file — try again."));
         return;
       }
       if (!changed) {
@@ -841,7 +856,7 @@
         [JSON.stringify(ids), new Date().toISOString(), id, ME.id],
       ).then(() => loadRows()).catch((e) => { failure = e; });
       if (failure) {
-        showCardError(node, failure.message ?? "Could not remove this file.");
+        showCardError(node, failText(failure, "Couldn’t remove this file — try again."));
         return;
       }
       const fresh = rows.find(r => r.id === id);
