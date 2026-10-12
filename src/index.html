@@ -126,6 +126,8 @@
     .error { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; }
     .muted { color: var(--hub-text-muted, #6b7280); }
     .empty { text-align: center; color: var(--hub-text-muted, #6b7280); padding: 8px 0 4px; }
+    .load-error { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .load-error-retry { background: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 10px; font: inherit; font-weight: 600; color: inherit; cursor: pointer; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -241,6 +243,7 @@
     let rows = [];          // my switch rows
     let entitled = null;    // null until the status endpoint answers
     let externalContacts = new Map(); // normalized email → { status, name }
+    let contactsUnread = false; // the registry could not be read: a contact's status is unknown, not "pending"
     let contactsBook = [];  // optional prefill from the contacts app: [{name, email}]
     let filesMeta = new Map(); // fileId → { name, size } for attachment display
 
@@ -251,20 +254,23 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sql, params }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       // The hub reports a refused write as a JSON body with an `error` key
       // (403 row policy, 400 bad statement, 507 over quota). fetch() does not
       // reject on those, so without this throw every caller's rollback and
       // error toast below is unreachable code.
-      if (!res.ok || json.error) throw new Error(json.error || `Database request failed (${res.status})`);
+      if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || `Database request failed (${res.status})`);
       return json;
     }
 
     async function loadMembers() {
-      try {
-        const res = await fetch(`${CONTEXT}?keys=family.members`);
-        members = ((await res.json())["family.members"]) ?? [];
-      } catch { members = []; }
+      if (!CONTEXT) { members = []; return; }
+      // A roster that could not be read is a failed load, not an empty household.
+      const res = await fetch(`${CONTEXT}?keys=family.members`);
+      if (!res.ok) throw new Error(`context ${res.status}`);
+      const json = await res.json();
+      if (!json || typeof json !== "object" || (Array.isArray(json.$errors) && json.$errors.includes("family.members"))) throw new Error("context: unexpected response");
+      members = json["family.members"] ?? [];
     }
 
     async function loadRows() {
@@ -288,17 +294,21 @@
     // The household-wide double-opt-in registry: normalized email → status.
     async function loadExternalContacts() {
       externalContacts = new Map();
-      if (!XC_LIST || !canManageExternalContacts(ME, window.__IS_ADMIN === true)) return;
+      contactsUnread = false;
+      // Someone who may not manage contacts is not sent the registry at all:
+      // for them every status is unknown, which is no badge, not "Pending".
+      if (!XC_LIST) return;
+      if (!canManageExternalContacts(ME, window.__IS_ADMIN === true)) { contactsUnread = true; return; }
       try {
         const res = await fetch(XC_LIST, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
         });
-        if (!res.ok) return;
+        if (!res.ok) { contactsUnread = true; return; }
         const { contacts } = await res.json();
         for (const c of contacts ?? []) {
           externalContacts.set(normalizeEmail(c.email), { status: c.status, name: c.name || "" });
         }
-      } catch { /* leave empty */ }
+      } catch { contactsUnread = true; }
     }
 
     // Optional convenience: emails from the contacts app to offer as quick-adds.
@@ -329,7 +339,8 @@
     }
 
     function contactStatus(email) {
-      return externalContacts.get(normalizeEmail(email))?.status ?? "pending";
+      // No badge at all when the registry is unread: "Pending" would be a guess.
+      return externalContacts.get(normalizeEmail(email))?.status ?? (contactsUnread ? null : "pending");
     }
     function contactName(email) {
       const norm = normalizeEmail(email);
@@ -374,8 +385,8 @@
 
       if (rows.length === 0) {
         dot.className = "status-dot disarmed";
-        headline.textContent = "No switches yet";
-        detail.textContent = "Add a switch to get started.";
+        headline.textContent = loadFailed ? "Switches not loaded" : "No switches yet";
+        detail.textContent = loadFailed ? "" : "Add a switch to get started.";
         return;
       }
       if (armed.length === 0) {
@@ -466,7 +477,7 @@
         const who = name ? `${esc(name)} · ${esc(email)}` : esc(email);
         return `<span class="ext-chip" data-email="${esc(email)}">
             <span class="who">${who}</span>
-            <span class="badge ${status}">${BADGE_LABEL[status] ?? "Pending"}</span>
+            ${status ? `<span class="badge ${status}">${BADGE_LABEL[status] ?? "Pending"}</span>` : ""}
             <button type="button" class="x" data-action="remove-external" title="Remove">×</button>
           </span>`;
       }).join("");
@@ -527,9 +538,12 @@
 
     function renderSwitches() {
       const list = el("switches");
-      list.innerHTML = "";
+      // Until the switches read succeeds, the banner stands in for the empty state.
+      list.innerHTML = loadFailed
+        ? '<div class="load-error" data-testid="load-error" role="alert"><span>Couldn’t load your switches.</span> <button type="button" class="load-error-retry" data-testid="load-retry">Try again</button></div>'
+        : "";
       if (ME && rows.length === 0) {
-        list.innerHTML = '<div class="card empty">You don\'t have any switches yet. Add one below.</div>';
+        if (!loadFailed) list.innerHTML = '<div class="card empty">You don\'t have any switches yet. Add one below.</div>';
       } else {
         for (const row of rows) list.appendChild(renderSwitchCard(row));
       }
@@ -550,6 +564,8 @@
       else el("switches").appendChild(fresh);
     }
 
+    // True from a failed first load until a load succeeds.
+    let loadFailed = false;
     function renderAll() { renderBanner(); renderOverall(); renderSwitches(); }
 
     // Re-render only the live status text without rebuilding forms (preserves edits).
@@ -592,11 +608,18 @@
       if (error) { showCardError(node, error); return false; }
       showCardError(node, null);
 
-      await db(
-        "UPDATE app_dead_mans_switch__switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
-        [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
-      );
-      await loadRows();
+      try {
+        const { changed } = await db(
+          "UPDATE app_dead_mans_switch__switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
+          [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
+        );
+        // No row matched: the switch was deleted somewhere else.
+        if (changed === 0) throw new Error("This switch no longer exists. Reopen the app to see your switches.");
+        await loadRows();
+      } catch (e) {
+        showCardError(node, e.message ?? "Could not save this switch.");
+        return false;
+      }
       // Re-render only this card (reflects the saved label/status); other cards
       // keep their DOM so any unsaved edits in them survive.
       if (!silent) { syncCard(id); renderOverall(); }
@@ -608,11 +631,16 @@
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const hadCards = !!el("switches").querySelector(".switch-card");
-      await db(
-        "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
-        [id, ME.id, now, now],
-      );
-      await loadRows();
+      try {
+        await db(
+          "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
+          [id, ME.id, now, now],
+        );
+        await loadRows();
+      } catch (e) {
+        await hubAlert("Could not add a switch.", { description: e.message });
+        return;
+      }
       // Append the new card without rebuilding existing ones (preserves their
       // unsaved edits); only rebuild when leaving the empty state.
       if (hadCards) syncCard(id); else renderSwitches();
@@ -633,8 +661,13 @@
       // already gone AND after a `loadRows()` round trip, so an interruption
       // anywhere in between left every attachment with nothing to name it by.
       // Worst case here, a switch may hold several multi-MB files.
-      await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
-      await loadRows();
+      try {
+        await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
+        await loadRows();
+      } catch (e) {
+        showCardError(node, e.message ?? "Could not delete this switch.");
+        return;
+      }
       // Drop just this card; rebuild only to show the empty state once none remain.
       if (rows.length === 0) renderSwitches(); else node.remove();
       renderOverall();
@@ -802,11 +835,15 @@
       // write and after a loadRows() round trip; it was correct when it ran,
       // but it was best-effort and unretried, so a closed tab in between left
       // bytes nothing could name.
+      let failure = null;
       await db(
         "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
         [JSON.stringify(ids), new Date().toISOString(), id, ME.id],
-      );
-      await loadRows();
+      ).then(() => loadRows()).catch((e) => { failure = e; });
+      if (failure) {
+        showCardError(node, failure.message ?? "Could not remove this file.");
+        return;
+      }
       const fresh = rows.find(r => r.id === id);
       if (fresh) renderAttachments(node, fresh);
     }
@@ -862,6 +899,7 @@
     }
 
     el("switches").addEventListener("click", (e) => {
+      if (e.target.closest('[data-testid="load-retry"]')) { retryLoad(); return; }
       const btn = e.target.closest("button[data-action]");
       if (!btn) return;
       const node = btn.closest(".switch-card");
@@ -908,7 +946,30 @@
       ]);
       renderAll();
       setInterval(refreshStatuses, 60_000); // keep the countdowns fresh
-    })();
+    })().catch(async () => {
+      // The switches read or the member list rejected. Let the others settle
+      // (they never reject), then draw the page with the load-error banner.
+      loadFailed = true;
+      await Promise.all([loadEntitlement(), loadExternalContacts(), loadContactsBook(), loadFilesMeta()]);
+      renderAll();
+    });
+
+    // "Try again" on the banner: the whole first load again. The countdown
+    // timer starts here because init() never reached it.
+    let retrying = false;
+    async function retryLoad() {
+      if (retrying) return;
+      retrying = true;
+      try {
+        await Promise.all([
+          loadMembers(), loadRows(), loadEntitlement(), loadExternalContacts(), loadContactsBook(), loadFilesMeta(),
+        ]);
+        loadFailed = false;
+        renderAll();
+        setInterval(refreshStatuses, 60_000);
+      } catch { /* the banner stays */ }
+      retrying = false;
+    }
   </script>
 </body>
 </html>
