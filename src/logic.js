@@ -193,3 +193,50 @@ export function switchTitle(row, members, selfId) {
 export function canManageExternalContacts(me, isAdmin = false) {
   return !!me && (isAdmin === true || me.role === "adult");
 }
+
+/**
+ * The line a failed write shows, from the error's status — never the hub's
+ * text. "Try again" only where trying again can work.
+ */
+export function failureLine(e, { action, thing } = {}) {
+  if (e?.forUser) return e.message;
+  if (e?.code === "UNIQUE_CONSTRAINT" || /UNIQUE constraint failed/i.test(String(e?.message ?? ""))) return `That ${thing} already exists.`;
+  if (e?.status === 403) return `You don’t have permission to ${action}.`;
+  if (e?.status === 507) return "The household’s storage is full — free up space first.";
+  if (e?.status === 429) return "Too many tries — wait a minute and try again.";
+  if (e?.status === 404) return `This ${thing} has been removed.`;
+  if (e?.status === 409) return `This ${thing} was changed by someone else — check it first.`;
+  return `Couldn’t ${action} — try again.`;
+}
+
+/** A file the files endpoint refused: 413 too large, 415 a type it will not
+ *  store; the rest (429, 507, …) follow the table. */
+export function uploadFailureLine(e) {
+  if (e?.status === 413) return "That file is too large.";
+  if (e?.status === 415) return "That kind of file can’t be uploaded.";
+  return failureLine(e, { action: "upload the file", thing: "file" });
+}
+
+/**
+ * An external-contact invite the hub refused. Its 409 names the refusal with
+ * `code`: `unsubscribed`, `contact_limit`, or `contact_changed` (a lost race
+ * with another invite; retrying works); any other failure is a 500. An older
+ * hub answered 409 with no `code` for every throw of the invite, so a codeless
+ * 409 is told apart by the error's text (only to pick a line, never shown) and
+ * any other codeless 409 hedges. Its 429 is the monthly email allowance; the
+ * rest follow the table.
+ */
+export function inviteFailureLine(e) {
+  const text = String(e?.message ?? "");
+  const unsubscribed = "That address has unsubscribed from this household’s emails.";
+  const atLimit = "The household has reached its limit of external contacts. Remove one that is no longer needed first.";
+  if (e?.code === "unsubscribed") return unsubscribed;
+  if (e?.code === "contact_limit") return atLimit;
+  if (e?.code === "contact_changed") return "Couldn’t send the invite — try again.";
+  if (e?.status === 409 && !e?.code && /unsubscribed/i.test(text)) return unsubscribed;
+  if (e?.status === 409 && !e?.code && /limit/i.test(text)) return atLimit;
+  if (e?.status === 409 && !e?.code) return "Couldn’t send the invite. The address may have unsubscribed, or the household may have reached its limit of email contacts — try again later.";
+  if (e?.status === 409) return "Couldn’t send the invite — try again.";
+  if (e?.status === 429) return "The household’s emails for this month are used up — send the invite next month.";
+  return failureLine(e, { action: "send the invite", thing: "contact" });
+}

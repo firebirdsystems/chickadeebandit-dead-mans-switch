@@ -7,10 +7,10 @@
  * hard storage cap, permanently.
  *
  * The three lanes here, and who owns each:
- *  - DELETE a switch      → the hub, via manifest.delete_file_list_columns
+ *  - DELETE a switch      → the hub, via manifest.file_columns.switches.list_columns
  *                           (decoded through the household codec, queued inside
  *                           the DELETE's own transaction).
- *  - REMOVE an attachment → the hub, via manifest.update_file_list_columns
+ *  - REMOVE an attachment → the hub, via the same file_columns declaration
  *                           (reads the pre-image, queues what the new value
  *                           drops; the outbox re-checks references against the
  *                           committed database before touching R2).
@@ -35,7 +35,8 @@ describe("switch deletion", () => {
   const body = fn("deleteSwitch", "// Global check-in");
 
   it("declares the attachment list so the hub reclaims it transactionally", () => {
-    expect(manifest.delete_file_list_columns?.switches).toContain("attachment_file_ids");
+    // One file_columns entry covers both the DELETE and the UPDATE lane.
+    expect(manifest.file_columns?.switches?.list_columns).toContain("attachment_file_ids");
   });
 
   it("does not reclaim the attachments from the client", () => {
@@ -84,7 +85,8 @@ describe("attachment removal", () => {
   const body = fn("removeAttachment", "// The client no longer reclaims");
 
   it("declares the update lane so the hub reclaims the detached file", () => {
-    expect(manifest.update_file_list_columns?.switches).toContain("attachment_file_ids");
+    // The same file_columns entry as the delete lane: it covers both.
+    expect(manifest.file_columns?.switches?.list_columns).toContain("attachment_file_ids");
   });
 
   it("does not reclaim from the client", () => {

@@ -225,6 +225,7 @@
       canManageExternalContacts,
       parseAttachmentIds, formatFileSize,
       MAX_SWITCHES, MAX_EXTERNAL_RECIPIENTS, MAX_ATTACHMENTS,
+      failureLine, uploadFailureLine, inviteFailureLine,
     } from "./logic.js";
 
     // The page heading is static markup; its mark comes from the SDK.
@@ -259,7 +260,8 @@
       // (403 row policy, 400 bad statement, 507 over quota). fetch() does not
       // reject on those, so without this throw every caller's rollback and
       // error toast below is unreachable code.
-      if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || `Database request failed (${res.status})`);
+      // The status (and `code`) pick the line shown; the hub's text stays in the console.
+      if (!res.ok || !json || typeof json !== "object" || json.error) throw Object.assign(new Error(json?.error || `Database request failed (${res.status})`), { status: res.status, code: json?.code });
       return json;
     }
 
@@ -280,6 +282,17 @@
         [ME.id],
       );
       rows = r ?? [];
+    }
+
+    // After a write that landed: set the stored values on the local row first,
+    // then re-read. A failed re-read is not a failed write — it is logged and
+    // the page goes on from the patched row.
+    async function afterWrite(id, fields) {
+      const row = rows.find(r => r.id === id);
+      if (row) Object.assign(row, fields);
+      else rows = [...rows, { id, ...fields }];
+      try { await loadRows(); }
+      catch (e) { console.error("re-read after a stored write failed", e); }
     }
 
     async function loadEntitlement() {
@@ -596,10 +609,10 @@
     }
 
     // Only wording this app wrote for the reader is shown; the hub's own error
-    // text goes to the console and the reader gets the fixed line.
-    function failText(e, line) {
+    // text goes to the console and the reader gets failureLine's, by status.
+    function failText(e, words) {
       if (!e?.forUser) console.error(e);
-      return e?.forUser ? e.message : line;
+      return failureLine(e, words);
     }
 
     function showCardError(node, msg) {
@@ -615,18 +628,23 @@
       if (error) { showCardError(node, error); return false; }
       showCardError(node, null);
 
+      const saved = {
+        label: cfg.label, interval_hours: weeksToHours(cfg.intervalWeeks), message: cfg.message,
+        recipient_member_ids: JSON.stringify(cfg.recipientIds), recipient_emails: JSON.stringify(cfg.recipientEmails),
+        updated_at: new Date().toISOString(),
+      };
       try {
         const { changed } = await db(
           "UPDATE app_dead_mans_switch__switches SET label = ?, interval_hours = ?, message = ?, recipient_member_ids = ?, recipient_emails = ?, updated_at = ? WHERE id = ? AND member_id = ?",
-          [cfg.label, weeksToHours(cfg.intervalWeeks), cfg.message, JSON.stringify(cfg.recipientIds), JSON.stringify(cfg.recipientEmails), new Date().toISOString(), id, ME.id],
+          [saved.label, saved.interval_hours, saved.message, saved.recipient_member_ids, saved.recipient_emails, saved.updated_at, id, ME.id],
         );
         // No row matched: the switch was deleted somewhere else.
         if (changed === 0) throw Object.assign(new Error("This switch no longer exists. Reopen the app to see your switches."), { forUser: true });
-        await loadRows();
       } catch (e) {
-        showCardError(node, failText(e, "Couldn’t save this switch — try again."));
+        showCardError(node, failText(e, { action: "save this switch", thing: "switch" }));
         return false;
       }
+      await afterWrite(id, saved);
       // Re-render only this card (reflects the saved label/status); other cards
       // keep their DOM so any unsaved edits in them survive.
       if (!silent) { syncCard(id); renderOverall(); }
@@ -643,12 +661,15 @@
           "INSERT INTO app_dead_mans_switch__switches (id, member_id, label, active, interval_hours, message, recipient_member_ids, created_at, updated_at) VALUES (?, ?, '', 0, 168, '', '[]', ?, ?)",
           [id, ME.id, now, now],
         );
-        await loadRows();
       } catch (e) {
-        console.error(e);
-        await hubAlert("Couldn’t add a switch — try again.");
+        await hubAlert(failText(e, { action: "add a switch", thing: "switch" }));
         return;
       }
+      await afterWrite(id, {
+        member_id: ME.id, label: "", active: 0, interval_hours: 168, message: "",
+        recipient_member_ids: "[]", recipient_emails: "[]", attachment_file_ids: "[]",
+        last_checkin_at: null, last_alerted_at: null, created_at: now, updated_at: now,
+      });
       // Append the new card without rebuilding existing ones (preserves their
       // unsaved edits); only rebuild when leaving the empty state.
       if (hadCards) syncCard(id); else renderSwitches();
@@ -673,7 +694,7 @@
         await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
         await loadRows();
       } catch (e) {
-        showCardError(node, failText(e, "Couldn’t delete this switch — try again."));
+        showCardError(node, failText(e, { action: "delete this switch", thing: "switch" }));
         return;
       }
       // Drop just this card; rebuild only to show the empty state once none remain.
@@ -708,12 +729,19 @@
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         console.error("check-in failed", res.status, data?.error);
-        await hubAlert("Couldn’t check in — try again.");
+        await hubAlert(failureLine({ status: res.status }, { action: "check in", thing: "switch" }));
         return false;
       }
       entitled = true;
       renderBanner();
-      await loadRows();
+      // The check-in landed even if the re-read below fails: armCard must not
+      // roll back a started clock over a lost re-read. The hub stamps every
+      // switch this member owns.
+      const data = await res.json().catch(() => ({}));
+      const stamp = data?.last_checkin_at ?? new Date().toISOString();
+      for (const r of rows) Object.assign(r, { last_checkin_at: stamp, last_alerted_at: null });
+      try { await loadRows(); }
+      catch (e) { console.error("re-read after check-in failed", e); }
       // A check-in resets last_checkin on every switch — refresh live statuses
       // only, never the form fields, so an in-progress edit survives it.
       if (render) refreshStatuses();
@@ -730,12 +758,12 @@
       if (!(await saveCard(node, { silent: true }))) return;
       try {
         await setActive(id, 1);
-        await loadRows();
       } catch (e) {
         // Nothing was armed, so there is nothing to roll back.
-        showCardError(node, failText(e, "Couldn’t arm this switch — try again."));
+        showCardError(node, failText(e, { action: "arm this switch", thing: "switch" }));
         return;
       }
+      await afterWrite(id, { active: 1 });
       // The first check-in starts the server-side clock; a 402 here means the
       // household's plan is inactive, and any other failure means
       // the clock never started — disarm again either way, so nobody believes
@@ -745,9 +773,10 @@
         started = await checkIn({ render: false });
       } catch { started = false; }
       if (!started) {
+        let rolledBack = false;
         try {
           await setActive(id, 0);
-          await loadRows();
+          rolledBack = true;
         } catch (e) {
           // The one state that must never pass silently: active with no
           // check-in stamp is a switch that can never fire.
@@ -756,6 +785,7 @@
             description: "Turn it off and on again once you are back online.",
           });
         }
+        if (rolledBack) await afterWrite(id, { active: 0 });
       }
       // Rebuild just this card (its buttons + fields now reflect the armed,
       // saved state); refresh the other cards' live status only.
@@ -767,11 +797,11 @@
       const id = node.dataset.id;
       try {
         await setActive(id, 0);
-        await loadRows();
       } catch (e) {
-        showCardError(node, failText(e, "Couldn’t turn this switch off — try again."));
+        showCardError(node, failText(e, { action: "turn this switch off", thing: "switch" }));
         return;
       }
+      await afterWrite(id, { active: 0 });
       syncCard(id);
       refreshStatuses();
     }
@@ -792,14 +822,15 @@
 
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch(FILES, { method: "POST", body: form });
+      let res;
+      try { res = await fetch(FILES, { method: "POST", body: form }); }
+      catch (e) { console.error("upload failed", e); showCardError(node, uploadFailureLine(e)); return; }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         // An upload the hub refused (too large, wrong type, storage full) is
-        // shown in the hub's words; any other failure gets this page's line.
-        const refused = res.status === 507 || (res.status >= 400 && res.status < 500);
-        if (!refused) console.error("upload failed", res.status, data?.error);
-        showCardError(node, (refused && data.error) || "Couldn’t upload the file — try again.");
+        // said in this page's words, by status; the hub's text stays here.
+        console.error("upload failed", res.status, data?.error);
+        showCardError(node, uploadFailureLine({ status: res.status }));
         return;
       }
       const { id: fileId } = await res.json();
@@ -820,7 +851,7 @@
         ));
       } catch (e) {
         await fetch(`${FILES}/${fileId}`, { method: "DELETE" }).catch(() => {});
-        showCardError(node, failText(e, "Couldn’t attach the file — try again."));
+        showCardError(node, failText(e, { action: "attach the file", thing: "switch" }));
         return;
       }
       if (!changed) {
@@ -851,14 +882,16 @@
       // but it was best-effort and unretried, so a closed tab in between left
       // bytes nothing could name.
       let failure = null;
+      const updatedAt = new Date().toISOString();
       await db(
         "UPDATE app_dead_mans_switch__switches SET attachment_file_ids = ?, updated_at = ? WHERE id = ? AND member_id = ?",
-        [JSON.stringify(ids), new Date().toISOString(), id, ME.id],
-      ).then(() => loadRows()).catch((e) => { failure = e; });
+        [JSON.stringify(ids), updatedAt, id, ME.id],
+      ).catch((e) => { failure = e; });
       if (failure) {
-        showCardError(node, failText(failure, "Couldn’t remove this file — try again."));
+        showCardError(node, failText(failure, { action: "remove this file", thing: "switch" }));
         return;
       }
+      await afterWrite(id, { attachment_file_ids: JSON.stringify(ids), updated_at: updatedAt });
       const fresh = rows.find(r => r.id === id);
       if (fresh) renderAttachments(node, fresh);
     }
@@ -894,14 +927,19 @@
       // Skip the invite call when the address is already confirmed household-wide.
       const known = externalContacts.get(norm);
       if (known?.status !== "confirmed") {
-        const res = await fetch(XC_INVITE, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: norm, name: name || undefined }),
-        });
+        let res;
+        try {
+          res = await fetch(XC_INVITE, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: norm, name: name || undefined }),
+          });
+        } catch (e) { console.error("invite failed", e); showCardError(node, inviteFailureLine(e)); return; }
         if (res.status === 402) { entitled = false; renderBanner(); showCardError(node, "Adding external contacts needs an active plan."); return; }
         if (!res.ok) {
+          // Said by status in this page's words; the hub's text stays here.
           const data = await res.json().catch(() => ({}));
-          showCardError(node, data.error ?? "Couldn't send the confirmation email.");
+          console.error("invite failed", res.status, data?.error);
+          showCardError(node, inviteFailureLine({ status: res.status, code: data?.code, message: data?.error }));
           return;
         }
         const { contact } = await res.json();
