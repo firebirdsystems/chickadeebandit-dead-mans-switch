@@ -41,15 +41,8 @@
       "adults_bypass": false
     }
   },
-  "delete_file_list_columns": {
-    "switches": [
-      "attachment_file_ids"
-    ]
-  },
-  "update_file_list_columns": {
-    "switches": [
-      "attachment_file_ids"
-    ]
+  "file_columns": {
+    "switches": { "list_columns": ["attachment_file_ids"] }
   },
   "member_references": {
     "switches": [
