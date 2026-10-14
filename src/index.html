@@ -692,11 +692,15 @@
       // Worst case here, a switch may hold several multi-MB files.
       try {
         await db("DELETE FROM app_dead_mans_switch__switches WHERE id = ? AND member_id = ?", [id, ME.id]);
-        await loadRows();
       } catch (e) {
         showCardError(node, failText(e, { action: "delete this switch", thing: "switch" }));
         return;
       }
+      // The delete landed: drop the local row, then re-read. As in afterWrite,
+      // a failed re-read is logged, not reported as a failed delete.
+      rows = rows.filter(r => r.id !== id);
+      try { await loadRows(); }
+      catch (e) { console.error("re-read after a stored write failed", e); }
       // Drop just this card; rebuild only to show the empty state once none remain.
       if (rows.length === 0) renderSwitches(); else node.remove();
       renderOverall();
